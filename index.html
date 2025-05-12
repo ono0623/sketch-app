@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ART019 Style Sketch App</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  
+  <div id="toolbar">
+    <button id="pen">Pen</button>
+    <span>Size</span>
+    <input type="range" id="size" min="1" max="20" value="2">
+    <span>Color</span>
+    <input type="color" id="colorPicker" value="#000000">
+    <button id="lasso">Lasso</button>
+    <button id="undo">Undo</button>
+    <button id="redo">Redo</button>
+    <button id="clear">Clear</button>
+    <button id="save">Save</button>
+  </div>
+
+  <div id="main">
+    <div id="snapshotListContainer">
+      <h3>スナップショット一覧</h3>
+      <div id="snapshotList"></div>
+    </div>
+
+    <div id="canvasWrapper">
+      <canvas id="canvas" width="800" height="400"></canvas>
+      <div id="strokeList"></div>
+    </div>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
