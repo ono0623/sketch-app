@@ -355,13 +355,10 @@ function listSnapshots() {
       img.height = 120;
       img.style.border = '1px solid #ccc';
 
-      const loadBtn = document.createElement('button');
-      loadBtn.textContent = '読み込む';
-      loadBtn.onclick = () => loadSnapshotById(snapshot.id);
+      img.addEventListener('click', () => loadSnapshotById(snapshot.id));
 
       div.appendChild(label);
       div.appendChild(img);
-      div.appendChild(loadBtn);
       list.appendChild(div);
     });
   };
