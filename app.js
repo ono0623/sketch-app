@@ -162,6 +162,7 @@ function selectStrokesInLasso(p1, p2) {
   const maxY = Math.max(p1.y, p2.y);
   selectedStrokes.clear();
   paths.forEach((path, i) => {
+    if (!path.active) return;
     for (let pt of path.points) {
       if (pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY) {
         selectedStrokes.add(i);
@@ -256,18 +257,23 @@ function saveSnapshot() {
   if (!db) return;
   const id = `snapshot-${Date.now()}`;
   const preview = canvas.toDataURL(); 
+
+  const activeIndexes = paths.map((p, i) => p.active ? i : null).filter(i => i !== null);
+
   const tx = db.transaction([STORE_NAME], 'readwrite');
   const store = tx.objectStore(STORE_NAME);
   const snapshot = {
     id,
     timestamp: new Date(),
-    paths: paths,
-    preview: preview
+    activeIndexes,
+    preview
   };
   store.put(snapshot);
   alert('スナップショットが保存されました！');
   listSnapshots();
 }
+
+
 
 clearBtn.addEventListener('click', () => {
   saveSnapshot();
@@ -368,9 +374,13 @@ function loadSnapshotById(id) {
   const tx = db.transaction([STORE_NAME], 'readonly');
   const store = tx.objectStore(STORE_NAME);
   const request = store.get(id);
+
   request.onsuccess = function () {
     if (request.result) {
-      paths = request.result.paths;
+      paths.forEach(p => p.active = false);
+      request.result.activeIndexes.forEach(i => {
+        if (paths[i]) paths[i].active = true;
+      });
       redoStack = [];
       updateStrokeList();
       redraw();
@@ -379,9 +389,18 @@ function loadSnapshotById(id) {
   };
 }
 
+
 saveBtn.addEventListener('click', () => {
   saveSnapshot();
 });
+
+document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
+  selectedStrokes.forEach(index => {
+    paths[index].active = !paths[index].active;
+  });
+  updateStrokeList();
+});
+
 
 window.toggleActive = toggleActive;
 
