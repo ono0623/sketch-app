@@ -15,6 +15,7 @@ let redoStack = [];
 let currentPath = [];
 let startTime = 0;
 let selectedStrokes = new Set();
+let altPressed = false;
 
 const penBtn = document.getElementById('pen');
 const colorPicker = document.getElementById('colorPicker');
@@ -26,28 +27,126 @@ const sizeSlider = document.getElementById('size');
 const lassoBtn = document.getElementById('lasso');
 const DB_NAME = 'SketchAppDB';
 const STORE_NAME = 'snapshots';
+const PATHS_RECORD_ID = 'paths';
 const DB_VERSION = 1;
 let db;
 
 const openDB = () => {
   const request = indexedDB.open(DB_NAME, DB_VERSION);
-  request.onupgradeneeded = function (e) {
+
+  request.onupgradeneeded = e => {
     db = e.target.result;
     if (!db.objectStoreNames.contains(STORE_NAME)) {
       db.createObjectStore(STORE_NAME, { keyPath: 'id' });
     }
   };
-  request.onsuccess = function (e) {
-    db = e.target.result;
-    loadSnapshot();
+
+  request.onsuccess = () => {
+    db = request.result;
     listSnapshots();
+    loadAllPathsFromDB();    // ← ① まずストロークデータを復元
+    loadLatestSnapshot();    // ← ② 次に最新スナップショットの active 状態だけ適用
   };
-  request.onerror = function (e) {
-    console.error("IndexedDB error:", e.target.errorCode);
+
+  request.onerror = e => {
+    console.error('IndexedDB open error:', e.target.errorCode);
   };
 };
 
 openDB();
+
+const exportBtn = document.getElementById('exportBtn');
+const importBtn = document.getElementById('importBtn');
+const importInput = document.getElementById('importInput');
+
+exportBtn.addEventListener('click', exportAllData);
+importBtn.addEventListener('click', () => importInput.click());
+importInput.addEventListener('change', handleImportFile);
+
+async function exportAllData() {
+  // 1) paths レコード
+  const tx1 = db.transaction([STORE_NAME], 'readonly');
+  const store1 = tx1.objectStore(STORE_NAME);
+  const pathsRec = await new Promise(resolve => {
+    const req = store1.get(PATHS_RECORD_ID);
+    req.onsuccess = () => resolve(req.result || { id: PATHS_RECORD_ID, paths: [] });
+  });
+
+  // 2) snapshot レコード（prefix が snapshot- の全件）
+  const tx2 = db.transaction([STORE_NAME], 'readonly');
+  const store2 = tx2.objectStore(STORE_NAME);
+  const allRecs = await new Promise(resolve => {
+    const req = store2.getAll();
+    req.onsuccess = () => resolve(req.result);
+  });
+  const snaps = allRecs.filter(r => r.id.startsWith('snapshot-'));
+
+  // 3) JSON 化
+  const exportObj = {
+    paths: pathsRec.paths,
+    snapshots: snaps.map(r => ({
+      id: r.id,
+      timestamp: r.timestamp,
+      activeIndexes: r.activeIndexes,
+      preview: r.preview
+    }))
+  };
+  const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  // 4) ダウンロード用リンクを自動クリック
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sketch-data-${new Date().toISOString()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// --- ファイル選択後に JSON を読み込み、IndexedDB に書き戻す ---
+function handleImportFile(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      // paths
+      const txP = db.transaction([STORE_NAME], 'readwrite');
+      txP.objectStore(STORE_NAME)
+         .put({ id: PATHS_RECORD_ID, paths: imported.paths || [] });
+      // snapshots
+      const txS = db.transaction([STORE_NAME], 'readwrite');
+      const storeS = txS.objectStore(STORE_NAME);
+      (imported.snapshots || []).forEach(snap => {
+        storeS.put({
+          id: snap.id,
+          timestamp: snap.timestamp,
+          activeIndexes: snap.activeIndexes,
+          preview: snap.preview
+        });
+      });
+      // 再ロード
+      await txP.complete;
+      await txS.complete;
+      loadAllPathsFromDB();
+      listSnapshots();
+      loadLatestSnapshot();
+      alert('インポートが完了しました');
+    } catch (e) {
+      console.error(e);
+      alert('インポート中にエラーが発生しました');
+    }
+  };
+  reader.readAsText(file);
+}
+
+penBtn.addEventListener('click', () => {
+  lassoMode = false;
+  selectedStrokes.clear();
+  redraw();
+  updateStrokeList();
+});
+
 
 sizeSlider.addEventListener('input', (e) => {
   penSize = parseInt(e.target.value);
@@ -60,6 +159,21 @@ lassoBtn.addEventListener('click', () => {
   selectedStrokes.clear();
   redraw();
   updateStrokeList();
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Alt') {
+    altPressed = true;
+    redraw();
+    updateStrokeList();
+  }
+});
+window.addEventListener('keyup', e => {
+  if (e.key === 'Alt') {
+    altPressed = false;
+    redraw();
+    updateStrokeList();
+  }
 });
 
 function getMousePos(e) {
@@ -132,6 +246,7 @@ canvas.addEventListener('mouseup', () => {
     });
     redoStack = [];
     updateStrokeList();
+    saveAllPathsToDB();
   }
 });
 
@@ -156,14 +271,17 @@ canvas.addEventListener('touchend', (e) => {
 
 
 function selectStrokesInLasso(p1, p2) {
-  const minX = Math.min(p1.x, p2.x);
+   const minX = Math.min(p1.x, p2.x);
   const minY = Math.min(p1.y, p2.y);
   const maxX = Math.max(p1.x, p2.x);
   const maxY = Math.max(p1.y, p2.y);
+
   selectedStrokes.clear();
   paths.forEach((path, i) => {
-    if (!path.active) return;
-    for (let pt of path.points) {
+    // ALT 押下時は非アクティブも対象に、そうでなければ active=true のみ
+    if (!path.active && !altPressed) return;
+
+    for (const pt of path.points) {
       if (pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY) {
         selectedStrokes.add(i);
         break;
@@ -184,23 +302,32 @@ function calcLength(points) {
 
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
   paths.forEach(path => {
-    if (!path.active) return;
-    const points = path.points;
+    // 非アクティブかつ ALT 押下していなければ描かない
+    if (!path.active && !altPressed) return;
+
+    // アクティブなら普通に、非アクティブなら少し薄く
+    ctx.globalAlpha = path.active ? 1.0 : 0.3;
     ctx.strokeStyle = path.color;
-    ctx.lineWidth = path.size;
-    ctx.lineCap = 'round';
-    for (let i = 1; i < points.length; i++) {
+    ctx.lineWidth   = path.size;
+    ctx.lineCap     = 'round';
+
+    const pts = path.points;
+    for (let i = 1; i < pts.length; i++) {
       ctx.beginPath();
-      ctx.moveTo(points[i - 1].x, points[i - 1].y);
-      ctx.lineTo(points[i].x, points[i].y);
+      ctx.moveTo(pts[i-1].x, pts[i-1].y);
+      ctx.lineTo(pts[i].x,   pts[i].y);
       ctx.stroke();
     }
   });
+
+  // 投げ縄枠だけは常に表示
   if (lassoMode && lassoStart && lassoEnd) {
+    ctx.globalAlpha = 1.0;
     ctx.strokeStyle = 'rgba(0,0,255,0.5)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([5, 3]);
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([5,3]);
     ctx.strokeRect(
       Math.min(lassoStart.x, lassoEnd.x),
       Math.min(lassoStart.y, lassoEnd.y),
@@ -209,6 +336,9 @@ function redraw() {
     );
     ctx.setLineDash([]);
   }
+
+  // 描画後はアルファをリセット
+  ctx.globalAlpha = 1.0;
 }
 
 function updateStrokeList() {
@@ -238,6 +368,30 @@ function updateStrokeList() {
 function toggleActive(index) {
   paths[index].active = !paths[index].active;
   updateStrokeList();
+  saveAllPathsToDB();
+}
+
+function saveAllPathsToDB() {
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+  store.put({
+    id: PATHS_RECORD_ID,
+    paths: paths.map(p => ({ ...p }))  // 深いコピー
+  });
+}
+
+
+function loadAllPathsFromDB() {
+  const tx = db.transaction([STORE_NAME], 'readonly');
+  const store = tx.objectStore(STORE_NAME);
+  const req = store.get(PATHS_RECORD_ID);
+  req.onsuccess = () => {
+    if (req.result) {
+      paths = req.result.paths.map(p => ({ ...p }));
+      updateStrokeList();
+      redraw();
+    }
+  };
 }
 
 undoBtn.addEventListener('click', () => {
@@ -253,24 +407,54 @@ redoBtn.addEventListener('click', () => {
   }
 });
 
+
+
 function saveSnapshot() {
   if (!db) return;
   const id = `snapshot-${Date.now()}`;
-  const preview = canvas.toDataURL(); 
-
-  const activeIndexes = paths.map((p, i) => p.active ? i : null).filter(i => i !== null);
+  const preview = canvas.toDataURL();
+  const activeIndexes = paths
+    .map((p, i) => p.active ? i : null)
+    .filter(i => i !== null);
 
   const tx = db.transaction([STORE_NAME], 'readwrite');
   const store = tx.objectStore(STORE_NAME);
-  const snapshot = {
+  store.put({
     id,
-    timestamp: new Date(),
+    timestamp: new Date().toISOString(),
     activeIndexes,
     preview
-  };
-  store.put(snapshot);
+  });
+
+  // ついでに paths も最新状態を保存
+  saveAllPathsToDB();
+
   alert('スナップショットが保存されました！');
   listSnapshots();
+}
+
+function loadSnapshotById(id) {
+  const tx = db.transaction([STORE_NAME], 'readonly');
+  const store = tx.objectStore(STORE_NAME);
+  const req = store.get(id);
+
+  req.onsuccess = () => {
+    const snap = req.result;
+    
+    // すべて非アクティブ化
+    paths.forEach(p => p.active = false);
+    // スナップショットを反映
+    snap.activeIndexes.forEach(i => {
+      if (paths[i]) paths[i].active = true;
+    });
+    updateStrokeList();
+    redraw();
+    console.log(`スナップショット「${id}」を適用しました`);
+  };
+
+  req.onerror = e => {
+    console.error("読み込み失敗:", e.target.errorCode);
+  };
 }
 
 
@@ -370,24 +554,22 @@ function listSnapshots() {
   };
 }
 
-function loadSnapshotById(id) {
+
+function loadLatestSnapshot() {
   const tx = db.transaction([STORE_NAME], 'readonly');
   const store = tx.objectStore(STORE_NAME);
-  const request = store.get(id);
-
-  request.onsuccess = function () {
-    if (request.result) {
-      paths.forEach(p => p.active = false);
-      request.result.activeIndexes.forEach(i => {
-        if (paths[i]) paths[i].active = true;
-      });
-      redoStack = [];
-      updateStrokeList();
-      redraw();
-      alert(`「${id}」を読み込みました！`);
-    }
+  const getAllReq = store.getAll();
+  getAllReq.onsuccess = () => {
+    const snaps = getAllReq.result.filter(s => s.id.startsWith('snapshot-'));
+    if (snaps.length === 0) return;
+    const latest = snaps.sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+    )[0];
+    loadSnapshotById(latest.id);
   };
 }
+
+openDB();
 
 
 saveBtn.addEventListener('click', () => {
