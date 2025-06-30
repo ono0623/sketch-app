@@ -375,41 +375,41 @@ function redraw() {
 
 function updateStrokeList() {
   const list = document.getElementById('strokeList');
-  list.innerHTML = '';
+  list.innerHTML = ''; 
+
   paths.forEach((path, i) => {
     const div = document.createElement('div');
     div.className = 'stroke-entry';
     if (selectedStrokes.has(i)) {
       div.style.backgroundColor = '#ffffcc';
     }
+
+    // startTime を日付文字列に変換
+    const ts = new Date(path.startTime).toLocaleString();
+
+    // info 部分をタイムスタンプに置き換え
     const info = document.createElement('div');
-    info.innerHTML = `Stroke ${i + 1} - ${path.duration}ms, ${path.length.toFixed(1)}px, ${path.speed.toFixed(2)}px/ms
-      <label><input type="checkbox" ${path.active ? 'checked' : ''} onchange="toggleActive(${i})"> Active</label>`;
+    info.innerHTML = `
+      ${ts} — ${path.duration}ms, ${path.length.toFixed(1)}px, ${path.speed.toFixed(2)}px/ms
+      <label>
+        <input type="checkbox" ${path.active ? 'checked' : ''} onchange="toggleActive(${i})">
+        Active
+      </label>
+    `;
+
+    // プレビュー用キャンバス
     const preview = document.createElement('canvas');
     preview.width = 100;
     preview.height = 50;
     preview.style.border = '1px solid #ccc';
     drawPreview(preview, path);
+
     div.appendChild(info);
     div.appendChild(preview);
     list.appendChild(div);
   });
+
   redraw();
-}
-
-function toggleActive(index) {
-  paths[index].active = !paths[index].active;
-  updateStrokeList();
-  saveAllPathsToDB();
-}
-
-function saveAllPathsToDB() {
-  const tx = db.transaction([STORE_NAME], 'readwrite');
-  const store = tx.objectStore(STORE_NAME);
-  store.put({
-    id: PATHS_RECORD_ID,
-    paths: paths.map(p => ({ ...p }))  // 深いコピー
-  });
 }
 
 
