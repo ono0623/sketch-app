@@ -87,7 +87,7 @@ async function exportAllData() {
     snapshots: snaps.map(r => ({
       id: r.id,
       timestamp: r.timestamp,
-      activeIndexes: r.activeIndexes,
+      activeIndexes: r.activeIds,
       preview: r.preview
     }))
   };
@@ -102,7 +102,6 @@ async function exportAllData() {
   URL.revokeObjectURL(url);
 }
 
-// --- ファイル選択後に JSON を読み込み、IndexedDB に書き戻す ---
 function handleImportFile(evt) {
   const file = evt.target.files[0];
   if (!file) return;
@@ -110,28 +109,44 @@ function handleImportFile(evt) {
   reader.onload = async () => {
     try {
       const imported = JSON.parse(reader.result);
-      // paths
-      const txP = db.transaction([STORE_NAME], 'readwrite');
-      txP.objectStore(STORE_NAME)
-         .put({ id: PATHS_RECORD_ID, paths: imported.paths || [] });
-      // snapshots
-      const txS = db.transaction([STORE_NAME], 'readwrite');
-      const storeS = txS.objectStore(STORE_NAME);
+
+      // ① 単一のトランザクションで store を開き、全レコードをクリア
+      const tx = db.transaction([STORE_NAME], 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      // clear() はリクエストなので、完了を待つ
+      await new Promise(resolve => {
+        const clearReq = store.clear();
+        clearReq.onsuccess = () => resolve();
+      });
+
+      // ② paths レコードを完全上書き
+      store.put({
+        id: PATHS_RECORD_ID,
+        paths: imported.paths || []
+      });
+
+      // ③ snapshots レコードを完全上書き（既存はクリア済み）
       (imported.snapshots || []).forEach(snap => {
-        storeS.put({
-          id: snap.id,
-          timestamp: snap.timestamp,
-          activeIndexes: snap.activeIndexes,
-          preview: snap.preview
+        const ids = Array.isArray(snap.activeIds)
+     ? snap.activeIds
+     : Array.isArray(snap.activeIndexes)
+       ? snap.activeIndexes
+       : [];
+   store.put({
+     id:        snap.id,
+     timestamp: snap.timestamp,
+     activeIds: ids,           // ← 必ず activeIds に統一して保存
+     preview:   snap.preview
         });
       });
-      // 再ロード
-      await txP.complete;
-      await txS.complete;
+
+      // ④ トランザクション完了を待って UI を更新
+      await tx.complete;
       loadAllPathsFromDB();
       listSnapshots();
       loadLatestSnapshot();
-      alert('インポートが完了しました');
+
+      alert('インポート完了：全データをファイル内容で上書きしました。');
     } catch (e) {
       console.error(e);
       alert('インポート中にエラーが発生しました');
@@ -139,6 +154,14 @@ function handleImportFile(evt) {
   };
   reader.readAsText(file);
 }
+
+function generateStrokeId() {
+  // Date.now()＋ランダム文字列でほぼ衝突しない ID
+  return 'stroke-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+
+
+
 
 penBtn.addEventListener('click', () => {
   lassoMode = false;
@@ -230,20 +253,21 @@ canvas.addEventListener('mouseup', () => {
   drawing = false;
   const endTime = Date.now();
   if (currentPath.length > 1) {
-    const length = calcLength(currentPath);
+    const length   = calcLength(currentPath);
     const duration = endTime - startTime;
-    const speed = length / duration;
-    paths.push({
-      points: currentPath,
-      size: penSize,
-      color: penColor,
-      startTime,
-      endTime,
-      duration,
-      length,
+    const speed    = length / duration;
+    // ← ここで ID を生成してオブジェクトに含める
+    const stroke = {
+      id:        generateStrokeId(),
+      points:    currentPath,
+      size:      penSize,
+      color:     penColor,
+      startTime, endTime,
+      duration,  length,
       speed,
-      active: true
-    });
+      active:    true
+    };
+    paths.push(stroke);
     redoStack = [];
     updateStrokeList();
     saveAllPathsToDB();
@@ -301,44 +325,52 @@ function calcLength(points) {
 }
 
 function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  paths.forEach(path => {
-    // 非アクティブかつ ALT 押下していなければ描かない
+  paths.forEach((path, i) => {
+    // 通常時は active=true のものだけ描く。ALT押下中は全ストローク描画。
     if (!path.active && !altPressed) return;
 
-    // アクティブなら普通に、非アクティブなら少し薄く
+    // アクティブ／非アクティブで透明度を変える
     ctx.globalAlpha = path.active ? 1.0 : 0.3;
+
+    // 選択中は破線、それ以外は実線
+    if (selectedStrokes.has(i)) {
+      ctx.setLineDash([6, 4]);
+    } else {
+      ctx.setLineDash([]);
+    }
+
     ctx.strokeStyle = path.color;
     ctx.lineWidth   = path.size;
     ctx.lineCap     = 'round';
 
     const pts = path.points;
-    for (let i = 1; i < pts.length; i++) {
+    for (let j = 1; j < pts.length; j++) {
       ctx.beginPath();
-      ctx.moveTo(pts[i-1].x, pts[i-1].y);
-      ctx.lineTo(pts[i].x,   pts[i].y);
+      ctx.moveTo(pts[j - 1].x, pts[j - 1].y);
+      ctx.lineTo(pts[j].x,     pts[j].y);
       ctx.stroke();
     }
   });
 
-  // 投げ縄枠だけは常に表示
+  // 投げ縄枠は常に表示
   if (lassoMode && lassoStart && lassoEnd) {
     ctx.globalAlpha = 1.0;
+    ctx.setLineDash([5, 3]);
     ctx.strokeStyle = 'rgba(0,0,255,0.5)';
     ctx.lineWidth   = 1;
-    ctx.setLineDash([5,3]);
     ctx.strokeRect(
       Math.min(lassoStart.x, lassoEnd.x),
       Math.min(lassoStart.y, lassoEnd.y),
       Math.abs(lassoEnd.x - lassoStart.x),
       Math.abs(lassoEnd.y - lassoStart.y)
     );
-    ctx.setLineDash([]);
   }
 
-  // 描画後はアルファをリセット
+  // 描画設定リセット
   ctx.globalAlpha = 1.0;
+  ctx.setLineDash([]);
 }
 
 function updateStrokeList() {
@@ -413,47 +445,40 @@ function saveSnapshot() {
   if (!db) return;
   const id = `snapshot-${Date.now()}`;
   const preview = canvas.toDataURL();
-  const activeIndexes = paths
-    .map((p, i) => p.active ? i : null)
-    .filter(i => i !== null);
+  // インデックスではなく、active なストロークの ID 一覧を保存
+const activeIds = paths
+  .filter(p => p.active)
+  .map(p => p.id);
 
   const tx = db.transaction([STORE_NAME], 'readwrite');
   const store = tx.objectStore(STORE_NAME);
-  store.put({
-    id,
-    timestamp: new Date().toISOString(),
-    activeIndexes,
-    preview
+  store.put({ 
+    id, timestamp: new Date().toISOString(), activeIds, preview 
   });
 
-  // ついでに paths も最新状態を保存
+  // paths も最新状態を保存
   saveAllPathsToDB();
-
   alert('スナップショットが保存されました！');
   listSnapshots();
 }
 
-function loadSnapshotById(id) {
+function loadSnapshotById(snapshotId) {
   const tx = db.transaction([STORE_NAME], 'readonly');
   const store = tx.objectStore(STORE_NAME);
-  const req = store.get(id);
+  const req = store.get(snapshotId);
 
   req.onsuccess = () => {
     const snap = req.result;
-    
-    // すべて非アクティブ化
+    if (!snap || !Array.isArray(snap.activeIds)) return;
+    // まず全ストローク非アクティブ化
     paths.forEach(p => p.active = false);
-    // スナップショットを反映
-    snap.activeIndexes.forEach(i => {
-      if (paths[i]) paths[i].active = true;
+    // ID が一致するものだけアクティブに
+    snap.activeIds.forEach(id => {
+      const p = paths.find(path => path.id === id);
+      if (p) p.active = true;
     });
     updateStrokeList();
     redraw();
-    console.log(`スナップショット「${id}」を適用しました`);
-  };
-
-  req.onerror = e => {
-    console.error("読み込み失敗:", e.target.errorCode);
   };
 }
 
@@ -532,7 +557,8 @@ function listSnapshots() {
     const list = document.getElementById('snapshotList');
     list.innerHTML = ''; // 前回の一覧をクリア（← これが多重表示防止に重要）
 
-    request.result.forEach(snapshot => {
+    const snaps = request.result.filter(r => r.id.startsWith('snapshot-'));
+    snaps.forEach(snapshot => {
       const div = document.createElement('div');
       div.style.marginBottom = '10px';
 
@@ -569,8 +595,6 @@ function loadLatestSnapshot() {
   };
 }
 
-openDB();
-
 
 saveBtn.addEventListener('click', () => {
   saveSnapshot();
@@ -585,4 +609,3 @@ document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
 
 
 window.toggleActive = toggleActive;
-
