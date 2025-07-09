@@ -63,6 +63,28 @@ exportBtn.addEventListener('click', exportAllData);
 importBtn.addEventListener('click', () => importInput.click());
 importInput.addEventListener('change', handleImportFile);
 
+/**
+ * 全ストローク情報（paths 配列）を IndexedDB に保存する
+ */
+function saveAllPathsToDB() {
+  if (!db) return;  
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+  store.put({
+    id: PATHS_RECORD_ID,
+    // paths 配列を深いコピーして保存
+    paths: paths.map(p => ({ ...p }))
+  });
+  tx.oncomplete = () => {
+    // 必要ならここで何かログ出力
+    console.log('saveAllPathsToDB: paths saved');
+  };
+  tx.onerror = e => {
+    console.error('saveAllPathsToDB error:', e.target.error);
+  };
+}
+
+
 async function exportAllData() {
   // 1) paths レコード
   const tx1 = db.transaction([STORE_NAME], 'readonly');
@@ -459,21 +481,34 @@ function saveSnapshot() {
   if (!db) return;
   const id = `snapshot-${Date.now()}`;
   const preview = canvas.toDataURL();
-  // インデックスではなく、active なストロークの ID 一覧を保存
-const activeIds = paths
-  .filter(p => p.active)
-  .map(p => p.id);
+  const activeIds = paths.filter(p => p.active).map(p => p.id);
 
+  // ① スナップショット用トランザクションを作成
   const tx = db.transaction([STORE_NAME], 'readwrite');
   const store = tx.objectStore(STORE_NAME);
-  store.put({ 
-    id, timestamp: new Date().toISOString(), activeIds, preview 
+
+  // ② スナップショットレコードを保存
+  store.put({
+    id,
+    timestamp: new Date().toISOString(),
+    activeIds,
+    preview
   });
 
-  // paths も最新状態を保存
-  saveAllPathsToDB();
-  alert('スナップショットが保存されました！');
-  listSnapshots();
+  // ③ トランザクション完了時のハンドラ
+  tx.oncomplete = () => {
+    // paths も最新状態を保存
+    saveAllPathsToDB();
+    // 一覧を更新してアラートを出す
+    listSnapshots();
+    alert('スナップショットが保存されました！');
+  };
+
+  // エラー時のハンドラ（念のため）
+  tx.onerror = e => {
+    console.error('saveSnapshot transaction error:', e.target.error);
+    alert('スナップショットの保存に失敗しました');
+  };
 }
 
 function loadSnapshotById(snapshotId) {
