@@ -373,6 +373,20 @@ function redraw() {
   ctx.setLineDash([]);
 }
 
+function toggleActive(index) {
+  // ① 状態を反転
+  paths[index].active = !paths[index].active;
+
+  // ② 画面とリストを更新
+  updateStrokeList();   // リスト側を再生成
+  redraw();             // キャンバス側を再描画
+
+  // ③ IndexedDB に保存
+  saveAllPathsToDB();
+}
+
+window.toggleActive = toggleActive;
+
 function updateStrokeList() {
   const list = document.getElementById('strokeList');
   list.innerHTML = ''; 
