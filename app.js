@@ -347,37 +347,33 @@ function calcLength(points) {
 }
 
 function redraw() {
-   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // 1) ストロークを一本のパスで描画
   paths.forEach((path, i) => {
-    // 通常時は active=true のものだけ描く。ALT押下中は全ストローク描画。
     if (!path.active && !altPressed) return;
 
-    // アクティブ／非アクティブで透明度を変える
-    ctx.globalAlpha = path.active ? 1.0 : 0.3;
-
-    // 選択中は破線、それ以外は実線
-    if (selectedStrokes.has(i)) {
-      ctx.setLineDash([6, 4]);
-    } else {
-      ctx.setLineDash([]);
-    }
-
+    // 点線 or 実線 を切り替え
+    ctx.setLineDash(selectedStrokes.has(i) ? [6, 4] : []);
     ctx.strokeStyle = path.color;
     ctx.lineWidth   = path.size;
     ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
 
     const pts = path.points;
+    if (pts.length < 2) return;
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
     for (let j = 1; j < pts.length; j++) {
-      ctx.beginPath();
-      ctx.moveTo(pts[j - 1].x, pts[j - 1].y);
-      ctx.lineTo(pts[j].x,     pts[j].y);
-      ctx.stroke();
+      ctx.lineTo(pts[j].x, pts[j].y);
     }
+    ctx.stroke();
   });
 
-  // 投げ縄枠は常に表示
+  // 2) 投げ縄ツールの矩形を描画（常に最後に）
   if (lassoMode && lassoStart && lassoEnd) {
+    ctx.save();                          // スタイルを一時退避
     ctx.globalAlpha = 1.0;
     ctx.setLineDash([5, 3]);
     ctx.strokeStyle = 'rgba(0,0,255,0.5)';
@@ -388,12 +384,15 @@ function redraw() {
       Math.abs(lassoEnd.x - lassoStart.x),
       Math.abs(lassoEnd.y - lassoStart.y)
     );
+    ctx.restore();                       // 元のスタイルに戻す
   }
 
-  // 描画設定リセット
-  ctx.globalAlpha = 1.0;
+  // 3) 描画設定のリセット（念のため）
   ctx.setLineDash([]);
+  ctx.globalAlpha = 1.0;
 }
+
+
 
 function toggleActive(index) {
   // ① 状態を反転
