@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ART019 Style Sketch App</title>
+  <title>Sketch App</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   
   <div id="toolbar">
-    <button id="pen">Pen</button>
-    <span>Size</span>
+    <button id="pen">ペン</button>
+    <span>サイズ</span>
     <input type="range" id="size" min="1" max="20" value="2">
-    <span>Color</span>
+    <span>カラー</span>
     <input type="color" id="colorPicker" value="#000000">
-    <button id="lasso">Lasso</button>
-    <button id="toggleSelectedBtn">Toggle Selected Strokes</button>
+    <button id="lasso">投げ縄</button>
+    <button id="toggleSelectedBtn">表示/非表示</button>
     <button id="undo">Undo</button>
     <button id="redo">Redo</button>
-    <button id="clear">Clear</button>
-    <button id="save">Save</button>
+    <button id="clear">全削除</button>
+    <button id="save">スナップショットを保存</button>
     <button id="exportBtn">Export</button>
     <input type="file" id="importInput" accept=".json" style="display:none">
     <button id="importBtn">Import</button>
@@ -27,7 +27,7 @@
 
   <div id="main">
     <div id="snapshotListContainer">
-      <h3>Snapshot List</h3>
+      <h3>スナップショットリスト</h3>
       <div id="snapshotList"></div>
     </div>
 
