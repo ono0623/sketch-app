@@ -23,6 +23,7 @@
     <button id="exportBtn">Export</button>
     <input type="file" id="importInput" accept=".json" style="display:none">
     <button id="importBtn">Import</button>
+    <button id="toggleStrokeListBtn">ストローク一覧 表示/非表示</button>
   </div>
 
   <div id="main">
@@ -35,6 +36,13 @@
       <canvas id="canvas" width="800" height="400"></canvas>
       <div id="strokeList"></div>
     </div>
+
+    <!-- 追加：右側のタイムライン -->
+    <div id="timelinePanel">
+      <h3>Stroke Timeline</h3>
+      <canvas id="timelineCanvas" width="240" height="400"></canvas>
+    </div>
+
   </div>
 
   <script src="app.js" defer></script>

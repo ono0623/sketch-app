@@ -40,6 +40,7 @@ canvas {
 }
 
 #strokeList {
+  display: none; /* ← 最初は非表示 */
   margin-top: 10px;
   width: 600px;
   overflow-y: auto;
@@ -54,4 +55,19 @@ canvas {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 5px;
+}
+
+#timelinePanel{
+  width: 260px;
+  background: #f3f3f3;
+  border: 1px solid #ccc;
+  padding: 10px;
+}
+
+#timelinePanel canvas{
+  width: 100%;
+  height: 400px;   /* キャンバスと同じ高さに合わせるなら後でJSで同期します */
+  display: block;
+  background: #e0e0e0;
+  border: 1px solid #bbb;
 }

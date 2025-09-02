@@ -25,6 +25,12 @@ const clearBtn = document.getElementById('clear');
 const saveBtn = document.getElementById('save');
 const sizeSlider = document.getElementById('size');
 const lassoBtn = document.getElementById('lasso');
+const toggleStrokeListBtn = document.getElementById('toggleStrokeListBtn');
+const strokeListEl = document.getElementById('strokeList');
+
+const timelineCanvas = document.getElementById('timelineCanvas');
+const tl = timelineCanvas.getContext('2d');
+
 const DB_NAME = 'SketchAppDB';
 const STORE_NAME = 'snapshots';
 const PATHS_RECORD_ID = 'paths';
@@ -236,7 +242,8 @@ canvas.addEventListener('mousedown', (e) => {
   } else {
     drawing = true;
     startTime = Date.now();
-    currentPath = [getMousePos(e)];
+    const pos = getMousePos(e);
+    currentPath = [{ x: pos.x, y: pos.y, tAbs: performance.now() }];
   }
 });
 
@@ -248,7 +255,8 @@ canvas.addEventListener('mousemove', (e) => {
   }
   if (!drawing) return;
   const pos = getMousePos(e);
-  currentPath.push(pos);
+  currentPath.push({ x: pos.x, y: pos.y, tAbs: performance.now() });
+
   ctx.lineWidth = penSize;
   ctx.lineCap = 'round';
   ctx.strokeStyle = penColor;
@@ -275,6 +283,10 @@ canvas.addEventListener('mouseup', () => {
   drawing = false;
   const endTime = Date.now();
   if (currentPath.length > 1) {
+      // 既存リスト表示用
+      // 絶対時刻の範囲（points の tAbs から）
+    const startAbs = currentPath[0].tAbs ?? performance.now();
+    const endAbs   = currentPath.at(-1).tAbs ?? (startAbs + duration);
     const length   = calcLength(currentPath);
     const duration = endTime - startTime;
     const speed    = length / duration;
@@ -287,7 +299,9 @@ canvas.addEventListener('mouseup', () => {
       startTime, endTime,
       duration,  length,
       speed,
-      active:    true
+      active:    true,
+      startTimeAbs: startAbs,
+      endTimeAbs:   endAbs
     };
     paths.push(stroke);
     redoStack = [];
@@ -346,6 +360,97 @@ function calcLength(points) {
   return len;
 }
 
+function drawTimeline() {
+  if (!timelineCanvas || !tl) return;
+
+  // ビューポートサイズ（既存と同様）
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = timelineCanvas.clientWidth;
+  const cssH = canvas.clientHeight;
+  if (timelineCanvas.width !== Math.floor(cssW * dpr) ||
+      timelineCanvas.height !== Math.floor(cssH * dpr)) {
+    timelineCanvas.width  = Math.floor(cssW * dpr);
+    timelineCanvas.height = Math.floor(cssH * dpr);
+    tl.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  tl.clearRect(0, 0, cssW, cssH);
+
+
+  const visible = paths.filter(s => s.points && s.points.length >= 2);
+  if (visible.length === 0) return; // 1本もなければ描画しない
+  if (!paths.length) return;  // ← 積算は全体が前提
+
+  // === ここから「ギャップ圧縮」ロジック ===
+  // 1) 開始時刻で昇順ソート（描いた順）
+  const basis = [...paths];
+  basis.sort((a,b) => {
+    const aStart = (a.startTime ?? a.startTimeAbs ?? a.points?.[0]?.tAbs ?? 0);
+    const bStart = (b.startTime ?? b.startTimeAbs ?? b.points?.[0]?.tAbs ?? 0);
+    return aStart - bStart;
+  });
+
+  // 2) 各ストロークの duration と、累積オフセット（ギャップ無し）を計算
+  const offsets = new Map(); // id -> 累積開始位置（ms）
+  let cum = 0;               // これが“圧縮時間”の現在位置
+  for (const s of basis) {
+    const s0 = s.startTimeAbs ?? s.points?.[0]?.tAbs ?? s.startTime ?? 0;
+    const sN = s.endTimeAbs   ?? s.points?.[s.points.length-1]?.tAbs ?? s.endTime ?? s0;
+    const dur = Math.max(1, sN - s0); // 1ms 最低保証
+    offsets.set(s, cum);              // ← basis の累積で“続き”を作る
+    cum += dur;
+  }
+  const totalDrawMs = Math.max(1, cum); // 画面全高に正規化する総“描画時間”
+
+  // 3) 写像関数（横はフィット、縦は“圧縮時間”で正規化）
+  const xOf = (x) => (x / canvas.width) * cssW;
+  const yOfPoint = (s, tAbs) => {
+    const s0 = s.startTimeAbs ?? s.points?.[0]?.tAbs ?? s.startTime ?? 0;
+    const base = offsets.get(s) || 0;
+    const local = Math.max(0, (tAbs ?? s0) - s0); // ストローク内の経過時間
+    const compactT = base + local;                // ギャップを除いた“圧縮時間”
+    return (compactT / totalDrawMs) * cssH;
+  };
+
+  // 背景ガイド（任意：5分割）
+  tl.save();
+  tl.strokeStyle = '#cfcfcf';
+  tl.lineWidth = 1;
+  for (let k = 0; k <= 5; k++) {
+    const y = (k / 5) * cssH;
+    tl.beginPath(); tl.moveTo(0, y); tl.lineTo(cssW, y); tl.stroke();
+  }
+  tl.restore();
+
+  // 4) 各ストロークを描画（縦は yOfPoint を利用）
+  for (const s of visible) {
+    const pts = s.points;
+    if (!pts || pts.length < 2) continue;
+
+    const isSelected = selectedStrokes.has(paths.indexOf(s));
+    tl.save();
+    tl.lineWidth = isSelected ? 3 : 2;
+    tl.globalAlpha = s.active ? 1.0 : 0.3;
+    tl.strokeStyle = s.color || '#111';
+    tl.lineJoin = 'round';
+    tl.lineCap = 'round';
+
+    tl.beginPath();
+    tl.moveTo(xOf(pts[0].x), yOfPoint(s, pts[0].tAbs));
+    for (let j = 1; j < pts.length; j++) {
+      tl.lineTo(xOf(pts[j].x), yOfPoint(s, pts[j].tAbs));
+    }
+    tl.stroke();
+    tl.restore();
+  }
+
+  // 注記（全描画時間）
+  tl.save();
+  tl.fillStyle = '#555';
+  tl.font = '12px system-ui, -apple-system, Segoe UI, Roboto';
+  tl.restore();
+}
+
+
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -390,6 +495,7 @@ function redraw() {
   // 3) 描画設定のリセット（念のため）
   ctx.setLineDash([]);
   ctx.globalAlpha = 1.0;
+  drawTimeline();
 }
 
 
@@ -454,7 +560,20 @@ function loadAllPathsFromDB() {
   const req = store.get(PATHS_RECORD_ID);
   req.onsuccess = () => {
     if (req.result) {
-      paths = req.result.paths.map(p => ({ ...p }));
+        paths = req.result.paths.map(p => {
+    // 旧データ補完：points の各点に tAbs が無ければ均等割で付与
+    if (Array.isArray(p.points) && p.points.length >= 2 && !p.points[0].tAbs) {
+      const startAbs = performance.now();
+      const dur = Math.max(1, p.duration || 1);
+      p.points = p.points.map((pt, idx) => ({
+        x: pt.x, y: pt.y,
+        tAbs: startAbs + (dur * idx / (p.points.length - 1))
+      }));
+      p.startTimeAbs = startAbs;
+      p.endTimeAbs = startAbs + dur;
+    }
+    return { ...p };
+  });
       updateStrokeList();
       redraw();
     }
@@ -643,6 +762,13 @@ function loadLatestSnapshot() {
   };
 }
 
+toggleStrokeListBtn.addEventListener('click', () => {
+  if (strokeListEl.style.display === 'none' || strokeListEl.style.display === '') {
+    strokeListEl.style.display = 'block';
+  } else {
+    strokeListEl.style.display = 'none';
+  }
+});
 
 saveBtn.addEventListener('click', () => {
   saveSnapshot();
@@ -654,6 +780,14 @@ document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
   });
   updateStrokeList();
 });
+
+function syncTimelineSize() {
+  // 左キャンバスの CSS 高さに合わせる
+  timelineCanvas.style.height = canvas.clientHeight + 'px';
+  drawTimeline();
+}
+window.addEventListener('resize', syncTimelineSize);
+setTimeout(syncTimelineSize, 0);
 
 
 window.toggleActive = toggleActive;
