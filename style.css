@@ -20,7 +20,7 @@ body {
 }
 
 #snapshotListContainer {
-  width: 200px;
+  width: 240px;
   overflow-y: auto;
   max-height: 420px;
   border: 1px solid #ccc;
@@ -58,7 +58,7 @@ canvas {
 }
 
 #timelinePanel{
-  width: 260px;
+  width: 240px;
   background: #f3f3f3;
   border: 1px solid #ccc;
   padding: 10px;
