@@ -123,3 +123,36 @@ canvas {
   overflow-x: auto;
   min-width: 0;                /* Safari対策で明示 */
 }
+/* --- 重なり＆隙間消失対策：中央を内容幅以下に縮めない、gapのフォールバック --- */
+
+/* 左右は固定幅のまま（あなたの数値でOK） */
+#snapshotListContainer {
+  flex: 0 0 240px !important;
+  min-width: 240px !important;
+  box-sizing: border-box;
+}
+
+#timelinePanel {
+  flex: 0 0 240px !important;
+  min-width: 240px !important;
+  box-sizing: border-box;
+}
+
+/* ★中央は「中身（canvas）の幅」を下回らないようにする */
+#canvasWrapper {
+  flex: 0 0 auto;         /* 伸縮させず、内容サイズ基準に */
+  min-width: max-content; /* ← キモ。canvas の実幅(HTMLの width)を下回らない */
+}
+
+/* gapが効かない環境向けフォールバック（iPad Safariでも安心） */
+#snapshotListContainer { margin-right: 16px; }
+#timelinePanel { margin-left: 16px; }
+
+/* 横が収まりきらない場合はスクロールに逃がす（重なり防止） */
+#main {
+  overflow-x: auto;
+  min-width: 0;
+}
+
+/* 念のため：canvas自体はブロック化してはみ出しの見え方を安定 */
+#canvas { display: block; }
