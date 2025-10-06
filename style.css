@@ -174,3 +174,40 @@ canvas {
     height: 300px;
   }
 }
+/* iOS Safari を確実に検出して適用（他環境には影響させない）*/
+@supports (-webkit-touch-callout: none) {
+
+  /* iPad 横向き（例: 1024×1366 / 1366×1024） */
+  @media (orientation: landscape) {
+    #main { gap: 8px; }
+
+    /* キャンバスをぐっと控えめにする＝左右パネルに余白を返す */
+    #canvas {
+      width: 60vw;    /* 画面幅の60%に縮小（見た目のみ） */
+      height: auto;
+    }
+
+    /* 左右パネルに一定の幅を確保（潰れ防止） */
+    #snapshotListContainer { flex: 0 0 18vw; min-width: 200px; }
+    #timelinePanel          { flex: 0 0 18vw; min-width: 200px; }
+
+    /* タイムラインの見た目高さも少しだけ詰める */
+    #timelinePanel canvas { height: 360px; }
+  }
+
+  /* iPad 縦向き（例: 768×1024） */
+  @media (orientation: portrait) {
+    /* 3カラムだと窮屈なので縦並びへ */
+    #main { flex-direction: column; align-items: center; gap: 10px; }
+
+    #snapshotListContainer,
+    #canvasWrapper,
+    #timelinePanel {
+      width: 92%;
+      max-width: 920px;
+    }
+
+    #canvas { width: 100%; height: auto; }
+    #timelinePanel canvas { height: 300px; }
+  }
+}
