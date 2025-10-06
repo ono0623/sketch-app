@@ -124,3 +124,53 @@ canvas {
     height: 360px;
   }
 }
+/* ---- iPadなど中サイズ画面向けレイアウト調整 ---- */
+@media (max-width: 1280px) {
+  #main {
+    gap: 8px;
+  }
+
+  /* キャンバスを少し縮小 */
+  #canvas {
+    width: 65vw;   /* 画面幅の約65%にする */
+    height: auto;
+  }
+
+  /* サイドのリストとタイムラインを少し広く確保 */
+  #snapshotListContainer {
+    flex: 0 0 18vw;
+    min-width: 180px;
+  }
+
+  #timelinePanel {
+    flex: 0 0 18vw;
+    min-width: 180px;
+  }
+
+  #timelinePanel canvas {
+    height: 380px;  /* 高さはやや低め */
+  }
+}
+
+/* ---- iPad縦向きなどさらに狭い場合 ---- */
+@media (max-width: 1024px) {
+  #main {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* キャンバスとタイムラインを縦並びにする */
+  #canvasWrapper, #timelinePanel, #snapshotListContainer {
+    width: 90%;
+    max-width: 900px;
+  }
+
+  #canvas {
+    width: 100%;
+    height: auto;
+  }
+
+  #timelinePanel canvas {
+    height: 300px;
+  }
+}
