@@ -47,16 +47,6 @@ const PATHS_RECORD_ID = 'paths';
 const DB_VERSION = 1;
 let db;
 
-// ---- 実測ビューポート高をCSS変数 --vh に設定（iOS対策） ----
-function setViewportUnit() {
-  const vh = window.innerHeight * 0.01;
-  document.documentElement.style.setProperty('--vh', `${vh}px`);
-}
-window.addEventListener('resize', setViewportUnit);
-window.addEventListener('orientationchange', setViewportUnit);
-setViewportUnit(); // 初期設定
-
-
 const openDB = () => {
   const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -973,25 +963,12 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'l' || e.key === 'L') setMode('lasso');
 });
 
-function syncSnapshotListSize() {
-  const tlPanel = document.getElementById('timelinePanel');
-  const tlCanvas = document.getElementById('timelineCanvas');
-  const snapCont = document.getElementById('snapshotListContainer');
-  if (!tlPanel || !tlCanvas || !snapCont) return;
-  // 横幅はタイムラインに合わせる（細くした幅をそのまま反映）
-  snapCont.style.width = getComputedStyle(tlPanel).width;
-  // 高さはタイムラインキャンバス（＝キャンバス）に合わせて縦に伸ばす
-  snapCont.style.height = tlCanvas.clientHeight + 'px';
-}
 
 function syncTimelineSize() {
   // 左キャンバスの CSS 高さに合わせる
   timelineCanvas.style.height = canvas.clientHeight + 'px';
   drawTimeline();
-    // ★これを追加
-  syncSnapshotListSize();
 }
-
 window.addEventListener('resize', syncTimelineSize);
 setTimeout(syncTimelineSize, 0);
 
