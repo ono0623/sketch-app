@@ -22,7 +22,7 @@ body {
 #snapshotListContainer {
   width: 200px;
   overflow-y: auto;
-  max-height: 500px;
+  max-height: 420px;
   border: 1px solid #ccc;
   padding: 10px;
   background: #f9f9f9;
@@ -70,4 +70,30 @@ canvas {
   display: block;
   background: #e0e0e0;
   border: 1px solid #bbb;
+}
+
+/* ツールボタンの共通見た目（任意で微調整してOK） */
+#toolbar button {
+  border: 1px solid #bbb;
+  background: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+/* アクティブ状態を青く */
+#toolbar button.is-active {
+  background: #1677ff;      /* ブルー */
+  color: #fff;
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22,119,255,0.2);
+}
+
+/* ホバー時のちょい強調 */
+#toolbar button:hover {
+  border-color: #888;
+}
+#toolbar button.is-active:hover {
+  filter: brightness(0.95);
 }

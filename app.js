@@ -16,6 +16,10 @@ let currentPath = [];
 let startTime = 0;
 let selectedStrokes = new Set();
 let altPressed = false;
+// タイムライン用：描画済みストロークの座標キャッシュ & 投げ縄座標
+let timelineLayout = [];  // [{ index, id, active, points:[{x,y}], bbox:{minX,minY,maxX,maxY} }, ...]
+let timelineLassoStart = null;
+let timelineLassoEnd   = null;
 
 const penBtn = document.getElementById('pen');
 const colorPicker = document.getElementById('colorPicker');
@@ -27,6 +31,12 @@ const sizeSlider = document.getElementById('size');
 const lassoBtn = document.getElementById('lasso');
 const toggleStrokeListBtn = document.getElementById('toggleStrokeListBtn');
 const strokeListEl = document.getElementById('strokeList');
+const INACTIVE_ALPHA_WHEN_ALT = 0.15; // Alt中に非表示ストロークをどれくらい薄く描くか
+// タイムラインの投げ縄は非表示ストロークも常に選択対象にする
+const TIMELINE_LASSO_INCLUDES_INACTIVE = true;
+
+const showInactiveBtn = document.getElementById('showInactiveBtn');
+let showInactive = false; // ← iPad用トグル
 
 const timelineCanvas = document.getElementById('timelineCanvas');
 const tl = timelineCanvas.getContext('2d');
@@ -331,15 +341,16 @@ canvas.addEventListener('touchend', (e) => {
 
 
 function selectStrokesInLasso(p1, p2) {
-   const minX = Math.min(p1.x, p2.x);
+  const minX = Math.min(p1.x, p2.x);
   const minY = Math.min(p1.y, p2.y);
   const maxX = Math.max(p1.x, p2.x);
   const maxY = Math.max(p1.y, p2.y);
 
   selectedStrokes.clear();
+  const revealInactive = altPressed || showInactive; // ★ここで論理和
+
   paths.forEach((path, i) => {
-    // ALT 押下時は非アクティブも対象に、そうでなければ active=true のみ
-    if (!path.active && !altPressed) return;
+    if (!path.active && !revealInactive) return;
 
     for (const pt of path.points) {
       if (pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY) {
@@ -349,6 +360,7 @@ function selectStrokesInLasso(p1, p2) {
     }
   });
 }
+
 
 function calcLength(points) {
   let len = 0;
@@ -363,10 +375,9 @@ function calcLength(points) {
 function drawTimeline() {
   if (!timelineCanvas || !tl) return;
 
-  // ビューポートサイズ（既存と同様）
   const dpr = window.devicePixelRatio || 1;
   const cssW = timelineCanvas.clientWidth;
-  const cssH = canvas.clientHeight;
+  const cssH = timelineCanvas.clientHeight;  // ← タイムライン自身の高さを使用
   if (timelineCanvas.width !== Math.floor(cssW * dpr) ||
       timelineCanvas.height !== Math.floor(cssH * dpr)) {
     timelineCanvas.width  = Math.floor(cssW * dpr);
@@ -375,43 +386,37 @@ function drawTimeline() {
   }
   tl.clearRect(0, 0, cssW, cssH);
 
-
   const visible = paths.filter(s => s.points && s.points.length >= 2);
-  if (visible.length === 0) return; // 1本もなければ描画しない
-  if (!paths.length) return;  // ← 積算は全体が前提
+  if (visible.length === 0 || !paths.length) return;
 
-  // === ここから「ギャップ圧縮」ロジック ===
-  // 1) 開始時刻で昇順ソート（描いた順）
-  const basis = [...paths];
-  basis.sort((a,b) => {
+  // === ギャップ圧縮レイアウト計算（既存） ===
+  const basis = [...paths].sort((a,b) => {
     const aStart = (a.startTime ?? a.startTimeAbs ?? a.points?.[0]?.tAbs ?? 0);
     const bStart = (b.startTime ?? b.startTimeAbs ?? b.points?.[0]?.tAbs ?? 0);
     return aStart - bStart;
   });
 
-  // 2) 各ストロークの duration と、累積オフセット（ギャップ無し）を計算
-  const offsets = new Map(); // id -> 累積開始位置（ms）
-  let cum = 0;               // これが“圧縮時間”の現在位置
+  const offsets = new Map();
+  let cum = 0;
   for (const s of basis) {
     const s0 = s.startTimeAbs ?? s.points?.[0]?.tAbs ?? s.startTime ?? 0;
     const sN = s.endTimeAbs   ?? s.points?.[s.points.length-1]?.tAbs ?? s.endTime ?? s0;
-    const dur = Math.max(1, sN - s0); // 1ms 最低保証
-    offsets.set(s, cum);              // ← basis の累積で“続き”を作る
+    const dur = Math.max(1, sN - s0);
+    offsets.set(s, cum);
     cum += dur;
   }
-  const totalDrawMs = Math.max(1, cum); // 画面全高に正規化する総“描画時間”
+  const totalDrawMs = Math.max(1, cum);
 
-  // 3) 写像関数（横はフィット、縦は“圧縮時間”で正規化）
   const xOf = (x) => (x / canvas.width) * cssW;
   const yOfPoint = (s, tAbs) => {
     const s0 = s.startTimeAbs ?? s.points?.[0]?.tAbs ?? s.startTime ?? 0;
     const base = offsets.get(s) || 0;
-    const local = Math.max(0, (tAbs ?? s0) - s0); // ストローク内の経過時間
-    const compactT = base + local;                // ギャップを除いた“圧縮時間”
+    const local = Math.max(0, (tAbs ?? s0) - s0);
+    const compactT = base + local;
     return (compactT / totalDrawMs) * cssH;
   };
 
-  // 背景ガイド（任意：5分割）
+  // 背景ガイド
   tl.save();
   tl.strokeStyle = '#cfcfcf';
   tl.lineWidth = 1;
@@ -421,82 +426,148 @@ function drawTimeline() {
   }
   tl.restore();
 
-  // 4) 各ストロークを描画（縦は yOfPoint を利用）
+  // === ここでタイムライン座標をキャッシュ ===
+  timelineLayout = [];
   for (const s of visible) {
     const pts = s.points;
     if (!pts || pts.length < 2) continue;
 
-    const isSelected = selectedStrokes.has(paths.indexOf(s));
-    tl.save();
-    tl.lineWidth = isSelected ? 3 : 2;
-    tl.globalAlpha = s.active ? 1.0 : 0.3;
-    tl.strokeStyle = s.color || '#111';
-    tl.lineJoin = 'round';
-    tl.lineCap = 'round';
-
-    tl.beginPath();
-    tl.moveTo(xOf(pts[0].x), yOfPoint(s, pts[0].tAbs));
-    for (let j = 1; j < pts.length; j++) {
-      tl.lineTo(xOf(pts[j].x), yOfPoint(s, pts[j].tAbs));
+    const mapped = pts.map(p => ({ x: xOf(p.x), y: yOfPoint(s, p.tAbs) }));
+    // bbox
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const q of mapped) {
+      if (q.x < minX) minX = q.x;
+      if (q.y < minY) minY = q.y;
+      if (q.x > maxX) maxX = q.x;
+      if (q.y > maxY) maxY = q.y;
     }
-    tl.stroke();
-    tl.restore();
+    timelineLayout.push({
+      index: paths.indexOf(s),
+      id: s.id,
+      active: !!s.active,
+      points: mapped,
+      bbox: { minX, minY, maxX, maxY }
+    });
   }
 
-  // 注記（全描画時間）
+  // === 実描画（既存と同様） ===
+for (const s of visible) {
+  const pts = s.points;
+  if (!pts || pts.length < 2) continue;
+
+  const isSelected = selectedStrokes.has(paths.indexOf(s));
   tl.save();
-  tl.fillStyle = '#555';
-  tl.font = '12px system-ui, -apple-system, Segoe UI, Roboto';
+  tl.lineWidth = 2;
+  tl.globalAlpha = s.active ? 1.0 : 0.10;
+  tl.strokeStyle = s.color || '#111';
+  tl.lineJoin = 'round';
+  tl.lineCap = 'round';
+
+  // ★ 追加: 選択されたストロークは点線にする
+  if (isSelected) {
+    tl.setLineDash([6, 4]);   // [線の長さ, 間隔]
+  } else {
+    tl.setLineDash([]);       // 通常は実線
+  }
+
+  tl.beginPath();
+  tl.moveTo(xOf(pts[0].x), yOfPoint(s, pts[0].tAbs));
+  for (let j = 1; j < pts.length; j++) {
+    tl.lineTo(xOf(pts[j].x), yOfPoint(s, pts[j].tAbs));
+  }
+  tl.stroke();
   tl.restore();
+}
+
+
+  // 注記など（省略可）
+
+  // === タイムラインの投げ縄矩形をオーバーレイ ===
+  if (lassoMode && timelineLassoStart && timelineLassoEnd) {
+    tl.save();
+    tl.setLineDash([5, 3]);
+    tl.strokeStyle = 'rgba(0,0,255,0.5)';
+    tl.lineWidth = 1;
+    tl.strokeRect(
+      Math.min(timelineLassoStart.x, timelineLassoEnd.x),
+      Math.min(timelineLassoStart.y, timelineLassoEnd.y),
+      Math.abs(timelineLassoEnd.x - timelineLassoStart.x),
+      Math.abs(timelineLassoEnd.y - timelineLassoStart.y)
+    );
+    tl.restore();
+  }
 }
 
 
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 1) ストロークを一本のパスで描画
   paths.forEach((path, i) => {
-    if (!path.active && !altPressed) return;
+    const isSelected = selectedStrokes.has(i);
+    const isInactive = !path.active;
+    const revealInactive = altPressed || showInactive; // ← 追加
 
-    // 点線 or 実線 を切り替え
-    ctx.setLineDash(selectedStrokes.has(i) ? [6, 4] : []);
+    // 非アクティブは「Alt or ボタン」がOFF かつ 非選択なら描かない
+    if (isInactive && !revealInactive && !isSelected) return;
+
+    ctx.save();
+
+    // 選択は点線
+    ctx.setLineDash(isSelected ? [6, 4] : []);
+
+    // 薄さ：非アクティブは下げる（数値は好みで調整OK）
+    if (isInactive) {
+      // 選択中は少し濃いめ、未選択はかなり薄く
+      ctx.globalAlpha = isSelected ? 0.15 : 0.15;
+    } else {
+      ctx.globalAlpha = 1.0;
+    }
+
     ctx.strokeStyle = path.color;
     ctx.lineWidth   = path.size;
     ctx.lineCap     = 'round';
     ctx.lineJoin    = 'round';
 
     const pts = path.points;
-    if (pts.length < 2) return;
-
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let j = 1; j < pts.length; j++) {
-      ctx.lineTo(pts[j].x, pts[j].y);
+    if (pts && pts.length >= 2) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
+      ctx.stroke();
     }
-    ctx.stroke();
+    ctx.restore();
   });
 
-  // 2) 投げ縄ツールの矩形を描画（常に最後に）
+  // 既存のラッソ矩形・タイムライン描画はそのまま
   if (lassoMode && lassoStart && lassoEnd) {
-    ctx.save();                          // スタイルを一時退避
+    ctx.save();
     ctx.globalAlpha = 1.0;
     ctx.setLineDash([5, 3]);
     ctx.strokeStyle = 'rgba(0,0,255,0.5)';
-    ctx.lineWidth   = 1;
+    ctx.lineWidth = 1;
     ctx.strokeRect(
       Math.min(lassoStart.x, lassoEnd.x),
       Math.min(lassoStart.y, lassoEnd.y),
       Math.abs(lassoEnd.x - lassoStart.x),
       Math.abs(lassoEnd.y - lassoStart.y)
     );
-    ctx.restore();                       // 元のスタイルに戻す
+    ctx.restore();
   }
 
-  // 3) 描画設定のリセット（念のため）
-  ctx.setLineDash([]);
-  ctx.globalAlpha = 1.0;
   drawTimeline();
 }
+
+
+showInactiveBtn.addEventListener('click', () => {
+  showInactive = !showInactive;
+  showInactiveBtn.classList.toggle('active', showInactive);
+  showInactiveBtn.setAttribute('aria-pressed', String(showInactive));
+  redraw();
+  updateStrokeList(); // （リスト側の強調があるなら）
+});
+
+
+
 
 
 
@@ -511,8 +582,6 @@ function toggleActive(index) {
   // ③ IndexedDB に保存
   saveAllPathsToDB();
 }
-
-window.toggleActive = toggleActive;
 
 function updateStrokeList() {
   const list = document.getElementById('strokeList');
@@ -722,30 +791,32 @@ function listSnapshots() {
 
   request.onsuccess = function () {
     const list = document.getElementById('snapshotList');
-    list.innerHTML = ''; // 前回の一覧をクリア（← これが多重表示防止に重要）
+    list.innerHTML = '';
 
     const snaps = request.result.filter(r => r.id.startsWith('snapshot-'));
     snaps.forEach(snapshot => {
       const div = document.createElement('div');
       div.style.marginBottom = '10px';
 
-      const label = document.createElement('div');
-      label.textContent = `${snapshot.id} - ${new Date(snapshot.timestamp).toLocaleString()}`;
-
+      // プレビュー画像
       const img = document.createElement('img');
       img.src = snapshot.preview;
       img.width = 160;
       img.height = 120;
       img.style.border = '1px solid #ccc';
 
+      // ホバー時に表示されるツールチップ
+      const ts = new Date(snapshot.timestamp).toLocaleString();
+      img.title = ts;   // ←ここだけでOK
+
       img.addEventListener('click', () => loadSnapshotById(snapshot.id));
 
-      div.appendChild(label);
       div.appendChild(img);
       list.appendChild(div);
     });
   };
 }
+
 
 
 function loadLatestSnapshot() {
@@ -780,6 +851,118 @@ document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
   });
   updateStrokeList();
 });
+
+function getMousePosOnTimeline(e) {
+  const rect = timelineCanvas.getBoundingClientRect();
+  return {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
+  };
+}
+
+function selectStrokesInTimelineLasso(p1, p2) {
+  if (!timelineLayout || timelineLayout.length === 0) return;
+
+  const minX = Math.min(p1.x, p2.x);
+  const minY = Math.min(p1.y, p2.y);
+  const maxX = Math.max(p1.x, p2.x);
+  const maxY = Math.max(p1.y, p2.y);
+
+  const inRect = (pt) => (pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY);
+
+  selectedStrokes.clear();
+  for (const item of timelineLayout) {
+    // ALT未押下なら active のみを対象にする（キャンバス側の仕様に合わせる）
+    if (!item.active && !TIMELINE_LASSO_INCLUDES_INACTIVE && !altPressed) continue;
+
+    // まずバウンディングボックスで粗く判定
+    const b = item.bbox;
+    const bboxOverlap =
+      !(b.maxX < minX || b.minX > maxX || b.maxY < minY || b.minY > maxY);
+    if (!bboxOverlap) continue;
+
+    // 1点でも矩形に入れば選択
+    let hit = false;
+    for (const pt of item.points) {
+      if (inRect(pt)) { hit = true; break; }
+    }
+    if (hit) selectedStrokes.add(item.index);  // 既存どおり index ベース
+  }
+}
+
+timelineCanvas.addEventListener('mousedown', (e) => {
+  if (!lassoMode) return;  // ペンモード時は無視（必要ならペン描画もタイムラインに実装可）
+  timelineLassoStart = getMousePosOnTimeline(e);
+  timelineLassoEnd = null;
+  drawTimeline();
+});
+
+timelineCanvas.addEventListener('mousemove', (e) => {
+  if (!lassoMode || !timelineLassoStart) return;
+  timelineLassoEnd = getMousePosOnTimeline(e);
+  drawTimeline(); // 矩形の見た目を更新
+});
+
+timelineCanvas.addEventListener('mouseup', (e) => {
+  if (!lassoMode || !timelineLassoStart) return;
+  timelineLassoEnd = getMousePosOnTimeline(e);
+
+  // タイムライン上の座標で選択反映
+  selectStrokesInTimelineLasso(timelineLassoStart, timelineLassoEnd);
+
+  // クリア
+  timelineLassoStart = null;
+  timelineLassoEnd = null;
+
+  updateStrokeList();
+  redraw(); // キャンバス＆タイムラインを再描画（選択反映）
+});
+
+// すでにある変数: penBtn, lassoBtn, lassoMode, selectedStrokes などを利用
+
+// 1) モードの見た目とARIAを更新する関数
+function updateModeUI() {
+  const penActive   = !lassoMode;
+  const lassoActive =  lassoMode;
+
+  penBtn.classList.toggle('is-active', penActive);
+  lassoBtn.classList.toggle('is-active', lassoActive);
+
+  // アクセシビリティ（トグルボタンの状態を支援技術へ伝える）
+  penBtn.setAttribute('aria-pressed', String(penActive));
+  lassoBtn.setAttribute('aria-pressed', String(lassoActive));
+}
+
+// 2) モードをまとめて切り替える関数（状態＋UI＋再描画）
+function setMode(mode) {
+  lassoMode = (mode === 'lasso');
+  selectedStrokes.clear();  // モード切替時は選択をいったんリセット（好みに応じて）
+  updateModeUI();
+  redraw();
+  updateStrokeList();
+}
+
+// 3) 既存のクリックハンドラを置き換え/修正
+penBtn.addEventListener('click', () => {
+  setMode('pen');
+});
+
+lassoBtn.addEventListener('click', () => {
+  // 連打でトグルしたいなら以下でもOK：
+  // setMode(lassoMode ? 'pen' : 'lasso');
+  setMode('lasso');
+});
+
+// 4) 初期呼び出し（起動時に正しい見た目へ）
+updateModeUI();
+
+// （任意）キーボードショートカット：V=ペン / L=投げ縄
+window.addEventListener('keydown', (e) => {
+  if (e.target && /input|textarea|select/i.test(e.target.tagName)) return; // 入力中は無視
+  if (e.key === 'v' || e.key === 'V') setMode('pen');
+  if (e.key === 'l' || e.key === 'L') setMode('lasso');
+});
+
 
 function syncTimelineSize() {
   // 左キャンバスの CSS 高さに合わせる
