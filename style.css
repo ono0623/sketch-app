@@ -97,3 +97,30 @@ canvas {
 #toolbar button.is-active:hover {
   filter: brightness(0.95);
 }
+/* ---- iPadなど横幅が限られるときにキャンバスを少しだけ縮める ---- */
+#canvas {
+  /* 見た目の横幅。ビットマップ解像度は変えないので描画はそのまま */
+  width: min(800px, 100%);
+  height: auto; /* アスペクト比を維持して縮小 */
+}
+
+/* サイドパネルが潰れすぎないよう最低幅を確保 */
+#snapshotListContainer { flex: 0 0 220px; min-width: 220px; }
+#timelinePanel          { flex: 0 0 260px; min-width: 260px; }
+#canvasWrapper          { flex: 1 1 0; }
+
+/* 画面がやや狭い（iPad横/小型ノート想定）時に、キャンバスを少しだけ更に縮める */
+@media (max-width: 1200px) {
+  #main { gap: 12px; } /* 余白も少しだけ詰める */
+  #canvas {
+    /* 560〜760pxの範囲で、画面幅に応じてスッと縮む */
+    width: clamp(560px, 58vw, 760px);
+  }
+}
+
+/* さらに狭い場合の保険（任意）：タイムラインの高さを少し詰めて圧迫感を軽減 */
+@media (max-width: 1024px) {
+  #timelinePanel canvas {
+    height: 360px;
+  }
+}
