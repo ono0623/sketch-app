@@ -211,3 +211,26 @@ canvas {
     #timelinePanel canvas { height: 300px; }
   }
 }
+/* ---- キャンバス＆タイムラインの縦を大きくする ---- */
+
+/* 共通：縦方向を少し拡大（PC・iPad両対応） */
+#canvas {
+  height: 500px !important; /* ← 元の400pxより縦を広く */
+}
+
+#timelinePanel canvas {
+  height: 500px !important; /* タイムラインも揃える */
+}
+
+/* iPad向けの特別調整（必要なら） */
+@supports (-webkit-touch-callout: none) {
+  @media (orientation: landscape) {
+    #canvas { height: 550px !important; }         /* iPad横向き時 */
+    #timelinePanel canvas { height: 550px !important; }
+  }
+
+  @media (orientation: portrait) {
+    #canvas { height: 600px !important; }         /* iPad縦向き時 */
+    #timelinePanel canvas { height: 600px !important; }
+  }
+}
