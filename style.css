@@ -225,8 +225,13 @@ canvas {
 /* iPad向けの特別調整（必要なら） */
 @supports (-webkit-touch-callout: none) {
   @media (orientation: landscape) {
-    #canvas { height: 550px !important; }         /* iPad横向き時 */
-    #timelinePanel canvas { height: 550px !important; }
+     /* ★キャンバスとタイムラインの縦を大きく */
+    #canvas {
+      height: 600px !important; /* ← お好みで700〜800pxなどにしてもOK */
+    }
+    #timelinePanel canvas {
+      height: 600px !important;
+    }
   }
 
   @media (orientation: portrait) {
