@@ -20,8 +20,7 @@ body {
 }
 
 #snapshotListContainer {
-  
-  width: 240px;
+  width: 200px;
   overflow-y: auto;
   max-height: 420px;
   border: 1px solid #ccc;
@@ -59,14 +58,14 @@ canvas {
 }
 
 #timelinePanel{
-  width: 240px;
+  width: 260px;
   background: #f3f3f3;
   border: 1px solid #ccc;
   padding: 10px;
 }
 
 #timelinePanel canvas{
-  width: auto;
+  width: 100%;
   height: 400px;   /* キャンバスと同じ高さに合わせるなら後でJSで同期します */
   display: block;
   background: #e0e0e0;
