@@ -20,6 +20,7 @@ body {
 }
 
 #snapshotListContainer {
+  flex: 0 0 240px;     /* これで横幅を 300px に固定 */
   width: 240px;
   overflow-y: auto;
   max-height: 420px;
