@@ -98,3 +98,28 @@ canvas {
 #toolbar button.is-active:hover {
   filter: brightness(0.95);
 }
+
+/* 3カラムの幅ルールを明示して安定化 */
+#snapshotListContainer {
+  flex: 0 0 240px;        /* ← 左は固定幅（好きな値に） */
+  width: 240px;
+  min-width: 240px;
+  box-sizing: border-box; /* padding/枠込みで300px */
+}
+
+#canvasWrapper {
+  flex: 1 1 auto;         /* ← 中央は余り幅を全部受ける（可変） */
+  min-width: 0;           /* Safari/iPadのはみ出しバグ対策 */
+}
+
+#timelinePanel {
+  flex: 0 0 240px;        /* ← 右も固定幅（好きな値に） */
+  width: 240px;
+  min-width: 240px;
+  box-sizing: border-box;
+}
+
+/* 右パネル内のキャンバスはパネル幅にフィット */
+#timelinePanel canvas {
+  width: 100%;
+}
