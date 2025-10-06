@@ -1,3 +1,8 @@
+/* ================================
+   ベース安定化
+================================ */
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
   font-family: sans-serif;
   margin: 0;
@@ -5,42 +10,110 @@ body {
   background: #ffffff;
 }
 
+/* ================================
+   ツールバー
+================================ */
 #toolbar {
   margin: 10px;
   display: flex;
   gap: 10px;
 }
+#toolbar button.active,
+#toolbar button.is-active {
+  background: #1e90ff;
+  color: #fff;
+}
 
+/* ================================
+   3カラムレイアウト
+   （左：スナップショット／中：キャンバス／右：タイムライン）
+================================ */
 #main {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 20px;
+  gap: 12px;           /* ← 横のすき間（お好みで 8〜16px） */
+  flex-wrap: nowrap;   /* ← 折り返さない＝重なり防止 */
   padding: 10px;
 }
 
+/* 左パネル：スナップショットリスト（固定幅・横スク禁止） */
 #snapshotListContainer {
-  width: 200px;
+  flex: 0 0 210px;     /* ← 幅（200〜220pxでお好み） */
+  max-width: 210px;
   overflow-y: auto;
-  max-height: 420px;
+  overflow-x: hidden;
+  /* max-height は JSで高さ同期するなら不要。固定したいなら値を入れてOK */
   border: 1px solid #ccc;
-  padding: 10px;
+  padding: 8px;        /* 10→8でやや詰める */
   background: #f9f9f9;
 }
 
+/* 中央：キャンバスラッパ（可変幅・重なり防止の min-width:0 が超重要） */
 #canvasWrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;        /* ← Safari/iPad で中央が縮まず重なる問題の決め手 */
 }
 
+/* 右パネル：タイムライン（固定幅） */
+#timelinePanel{
+  flex: 0 0 210px;     /* ← 幅（200〜220pxでお好み） */
+  max-width: 210px;
+  background: #f3f3f3;
+  border: 1px solid #ccc;
+  padding: 8px;
+}
+
+/* ================================
+   キャンバス類
+================================ */
 canvas {
   border: 1px solid #ccc;
-  background: rgb(255, 255, 255);
+  background: #fff;
 }
 
+/* メインキャンバスは親幅にフィット（座標取得は getBoundingClientRect なのでOK） */
+#canvas {
+  width: 100%;
+  height: auto;
+  max-width: 900px;    /* ← 上限（800〜1000で好みのバランスに） */
+  display: block;      /* ← 行ボックスの隙を消す */
+}
+
+/* タイムラインキャンバスは横100%（高さはJSで同期） */
+#timelinePanel canvas{
+  width: 100%;
+  display: block;
+  /* height は JS の syncTimelineSize() で上書きされる想定 */
+  background: #e0e0e0;
+  border: 1px solid #bbb;
+}
+
+/* ================================
+   スナップショット内の見出し＆画像
+================================ */
+#snapshotListContainer h3,
+#timelinePanel h3 {
+  margin: 6px 0 8px;   /* 下の余白を詰める */
+  font-size: 14px;
+}
+
+/* サムネ画像は親幅にフィット（横スク無し） */
+#snapshotListContainer img {
+  width: 100% !important;   /* JSの width=160 を打ち消す */
+  height: auto !important;  /* JSの height=120 を打ち消す */
+  display: block;
+  border: 1px solid #ccc;
+}
+
+/* ================================
+   ストロークリスト
+================================ */
 #strokeList {
-  display: none; /* ← 最初は非表示 */
+  display: none;       /* ← 最初は非表示（トグルで表示） */
   margin-top: 10px;
   width: 600px;
   overflow-y: auto;
@@ -57,91 +130,16 @@ canvas {
   margin-bottom: 5px;
 }
 
-#timelinePanel{
-  width: 260px;
-  background: #f3f3f3;
-  border: 1px solid #ccc;
-  padding: 10px;
-}
-
-#timelinePanel canvas{
-  width: 100%;
-  height: 400px;   /* キャンバスと同じ高さに合わせるなら後でJSで同期します */
-  display: block;
-  background: #e0e0e0;
-  border: 1px solid #bbb;
-}
-
-/* ツールボタンの共通見た目（任意で微調整してOK） */
-#toolbar button {
-  border: 1px solid #bbb;
-  background: #fff;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
-}
-
-/* アクティブ状態を青く */
-#toolbar button.is-active {
-  background: #1677ff;      /* ブルー */
-  color: #fff;
-  border-color: #1677ff;
-  box-shadow: 0 0 0 2px rgba(22,119,255,0.2);
-}
-
-/* ホバー時のちょい強調 */
-#toolbar button:hover {
-  border-color: #888;
-}
-#toolbar button.is-active:hover {
-  filter: brightness(0.95);
-}
-
-/* 追加・上書き（末尾に追記でOK） */
-
-/* 左右パネルを固定幅にして、中央だけ縮む */
-#snapshotListContainer,
-#timelinePanel {
-  flex: 0 0 260px;   /* 幅260pxで固定。必要なら240〜280で調整 */
-  max-width: 260px;
-}
-
-/* 中央は伸縮OK。min-width:0 を入れないとiPad/Safariで横スクが出やすい */
-#canvasWrapper {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* キャンバスは可変幅に（中身はCSSスケーリング。既存の座標取得はgetBoundingClientRectなのでOK） */
-#canvas {
-  width: 100%;
-  height: auto;
-  max-width: 900px;  /* 画面に合わせて縮む上限。お好みで調整（例: 800〜1000） */
-}
-
-/* スナップショットは親幅にフィット。横スク禁止 */
-#snapshotListContainer {
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-/* サムネ画像は親幅いっぱい＆アスペクト比維持 */
-#snapshotListContainer img {
-  width: 100% !important;  /* JSのwidth=160に勝つために!important */
-  height: auto !important; /* JSのheight=120に勝つために!important */
-  display: block;
-}
-
-/* タイムラインcanvasも親幅に合わせる（JSで高さ同期しているので横だけCSS） */
-#timelinePanel canvas {
-  width: 100%;
-  height: 400px; /* JSでcanvas側高さ同期しているならこの値は目安。見た目用 */
-  display: block;
-}
-
-/* 画面がさらに狭いときは左右パネルを縦積みに（任意） */
+/* ================================
+   レスポンシブ（任意）
+   狭い画面で縦積みにしたい場合だけ有効化
+================================ */
+/*
 @media (max-width: 1024px) {
   #main { flex-wrap: wrap; }
-  #snapshotListContainer, #timelinePanel { flex: 1 1 260px; max-width: none; }
+  #snapshotListContainer, #timelinePanel {
+    flex: 1 1 260px;
+    max-width: none;
+  }
 }
+*/
