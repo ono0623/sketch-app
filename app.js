@@ -100,6 +100,13 @@ function saveAllPathsToDB() {
   };
 }
 
+// ドラッグがごく小さい（タップ相当）場合はラッソ選択として扱わない
+const LASSO_MIN_PX = 6;
+function isSmallRect(p1, p2) {
+  return !p1 || !p2 ||
+    (Math.abs(p2.x - p1.x) < LASSO_MIN_PX && Math.abs(p2.y - p1.y) < LASSO_MIN_PX);
+}
+
 
 async function exportAllData() {
   // 1) paths レコード
@@ -281,26 +288,33 @@ canvas.addEventListener('mousemove', (e) => {
   }
 });
 
-canvas.addEventListener('mouseup', () => {
-  if (lassoMode && lassoStart && lassoEnd) {
-    selectStrokesInLasso(lassoStart, lassoEnd);
+canvas.addEventListener('mouseup', (e) => {
+  // ★ ラッソモード中はストローク確定を絶対に行わない
+  if (lassoMode) {
+    if (lassoStart && lassoEnd && !isSmallRect(lassoStart, lassoEnd)) {
+      selectStrokesInLasso(lassoStart, lassoEnd);
+    }
+    // 状態クリア（次のタップで誤確定しないように）
     lassoStart = null;
     lassoEnd = null;
+    drawing = false;
+    currentPath = [];
     updateStrokeList();
     redraw();
     return;
   }
-  drawing = false;
+
+  // ここからペンモード時のみ
   const endTime = Date.now();
-  if (currentPath.length > 1) {
-      // 既存リスト表示用
-      // 絶対時刻の範囲（points の tAbs から）
+  if (drawing && currentPath.length > 1) {
+    const duration = endTime - startTime;
+
     const startAbs = currentPath[0].tAbs ?? performance.now();
     const endAbs   = currentPath.at(-1).tAbs ?? (startAbs + duration);
+
     const length   = calcLength(currentPath);
-    const duration = endTime - startTime;
-    const speed    = length / duration;
-    // ← ここで ID を生成してオブジェクトに含める
+    const speed    = length / Math.max(1, duration);
+
     const stroke = {
       id:        generateStrokeId(),
       points:    currentPath,
@@ -318,7 +332,10 @@ canvas.addEventListener('mouseup', () => {
     updateStrokeList();
     saveAllPathsToDB();
   }
+
+  drawing = false;
 });
+
 
 canvas.addEventListener('touchstart', (e) => {
   e.preventDefault();
@@ -907,16 +924,24 @@ timelineCanvas.addEventListener('mouseup', (e) => {
   if (!lassoMode || !timelineLassoStart) return;
   timelineLassoEnd = getMousePosOnTimeline(e);
 
-  // タイムライン上の座標で選択反映
+  // ドラッグが小さい＝タップ相当は無視（選択しない）
+  if (isSmallRect(timelineLassoStart, timelineLassoEnd)) {
+    timelineLassoStart = null;
+    timelineLassoEnd = null;
+    drawTimeline();
+    return;
+  }
+
   selectStrokesInTimelineLasso(timelineLassoStart, timelineLassoEnd);
 
-  // クリア
+  // 状態クリア & 反映
   timelineLassoStart = null;
   timelineLassoEnd = null;
 
   updateStrokeList();
-  redraw(); // キャンバス＆タイムラインを再描画（選択反映）
+  redraw();
 });
+
 
 // すでにある変数: penBtn, lassoBtn, lassoMode, selectedStrokes などを利用
 
@@ -936,16 +961,28 @@ function updateModeUI() {
 // 2) モードをまとめて切り替える関数（状態＋UI＋再描画）
 function setMode(mode) {
   lassoMode = (mode === 'lasso');
-  selectedStrokes.clear();  // モード切替時は選択をいったんリセット（好みに応じて）
+  selectedStrokes.clear();
+
+  // ★ ラッソ⇔ペン切替時に入力状態を完全リセット
+  drawing = false;
+  currentPath = [];
+
+  lassoStart = null;
+  lassoEnd = null;
+
+  timelineLassoStart = null;
+  timelineLassoEnd = null;
+
   updateModeUI();
   redraw();
   updateStrokeList();
 }
 
+
 // ── iPad向け：タイムラインのタッチ操作（ラッソ）を有効化 ──
 timelineCanvas.addEventListener('touchstart', (e) => {
   if (!lassoMode) return;
-  e.preventDefault(); // ← これが超重要（スクロール抑止）
+  e.preventDefault();
   const t = e.touches[0];
   timelineLassoStart = getMousePosOnTimeline(t);
   timelineLassoEnd = null;
@@ -963,16 +1000,36 @@ timelineCanvas.addEventListener('touchmove', (e) => {
 timelineCanvas.addEventListener('touchend', (e) => {
   if (!lassoMode || !timelineLassoStart) return;
   e.preventDefault();
-  // touchend では touches が空なので、直前の timelineLassoEnd を使う
-  if (!timelineLassoEnd) timelineLassoEnd = timelineLassoStart;
 
-  selectStrokesInTimelineLasso(timelineLassoStart, timelineLassoEnd);
+  // ドラッグが小さい＝タップ相当は無視（選択しない）
+  if (isSmallRect(timelineLassoStart, timelineLassoEnd)) {
+    timelineLassoStart = null;
+    timelineLassoEnd = null;
+    drawTimeline();
+    return;
+  }
+
+  if (timelineLassoEnd) {
+    selectStrokesInTimelineLasso(timelineLassoStart, timelineLassoEnd);
+  }
 
   timelineLassoStart = null;
   timelineLassoEnd = null;
+
+  // 念のため：キャンバス側の描画入力は無効化しておく
+  drawing = false;
+  currentPath = [];
+
   updateStrokeList();
   redraw();
 }, { passive: false });
+
+timelineCanvas.addEventListener('touchcancel', () => {
+  timelineLassoStart = null;
+  timelineLassoEnd = null;
+  drawTimeline();
+}, { passive: false });
+
 
 
 // 3) 既存のクリックハンドラを置き換え/修正
