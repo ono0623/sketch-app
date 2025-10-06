@@ -97,3 +97,9 @@ canvas {
 #toolbar button.is-active:hover {
   filter: brightness(0.95);
 }
+
+/* 末尾に追加 */
+#canvas,
+#timelineCanvas {
+  touch-action: none;        /* 指ジェスチャでのスクロール/ズームを抑止 */
+}

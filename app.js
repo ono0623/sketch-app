@@ -942,6 +942,39 @@ function setMode(mode) {
   updateStrokeList();
 }
 
+// ── iPad向け：タイムラインのタッチ操作（ラッソ）を有効化 ──
+timelineCanvas.addEventListener('touchstart', (e) => {
+  if (!lassoMode) return;
+  e.preventDefault(); // ← これが超重要（スクロール抑止）
+  const t = e.touches[0];
+  timelineLassoStart = getMousePosOnTimeline(t);
+  timelineLassoEnd = null;
+  drawTimeline();
+}, { passive: false });
+
+timelineCanvas.addEventListener('touchmove', (e) => {
+  if (!lassoMode || !timelineLassoStart) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  timelineLassoEnd = getMousePosOnTimeline(t);
+  drawTimeline();
+}, { passive: false });
+
+timelineCanvas.addEventListener('touchend', (e) => {
+  if (!lassoMode || !timelineLassoStart) return;
+  e.preventDefault();
+  // touchend では touches が空なので、直前の timelineLassoEnd を使う
+  if (!timelineLassoEnd) timelineLassoEnd = timelineLassoStart;
+
+  selectStrokesInTimelineLasso(timelineLassoStart, timelineLassoEnd);
+
+  timelineLassoStart = null;
+  timelineLassoEnd = null;
+  updateStrokeList();
+  redraw();
+}, { passive: false });
+
+
 // 3) 既存のクリックハンドラを置き換え/修正
 penBtn.addEventListener('click', () => {
   setMode('pen');
