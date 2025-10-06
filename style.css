@@ -97,3 +97,51 @@ canvas {
 #toolbar button.is-active:hover {
   filter: brightness(0.95);
 }
+
+/* 追加・上書き（末尾に追記でOK） */
+
+/* 左右パネルを固定幅にして、中央だけ縮む */
+#snapshotListContainer,
+#timelinePanel {
+  flex: 0 0 260px;   /* 幅260pxで固定。必要なら240〜280で調整 */
+  max-width: 260px;
+}
+
+/* 中央は伸縮OK。min-width:0 を入れないとiPad/Safariで横スクが出やすい */
+#canvasWrapper {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* キャンバスは可変幅に（中身はCSSスケーリング。既存の座標取得はgetBoundingClientRectなのでOK） */
+#canvas {
+  width: 100%;
+  height: auto;
+  max-width: 900px;  /* 画面に合わせて縮む上限。お好みで調整（例: 800〜1000） */
+}
+
+/* スナップショットは親幅にフィット。横スク禁止 */
+#snapshotListContainer {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* サムネ画像は親幅いっぱい＆アスペクト比維持 */
+#snapshotListContainer img {
+  width: 100% !important;  /* JSのwidth=160に勝つために!important */
+  height: auto !important; /* JSのheight=120に勝つために!important */
+  display: block;
+}
+
+/* タイムラインcanvasも親幅に合わせる（JSで高さ同期しているので横だけCSS） */
+#timelinePanel canvas {
+  width: 100%;
+  height: 400px; /* JSでcanvas側高さ同期しているならこの値は目安。見た目用 */
+  display: block;
+}
+
+/* 画面がさらに狭いときは左右パネルを縦積みに（任意） */
+@media (max-width: 1024px) {
+  #main { flex-wrap: wrap; }
+  #snapshotListContainer, #timelinePanel { flex: 1 1 260px; max-width: none; }
+}
