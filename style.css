@@ -20,7 +20,7 @@ body {
 }
 
 #snapshotListContainer {
-  flex: 0 0 240px;     /* これで横幅を 300px に固定 */
+  
   width: 240px;
   overflow-y: auto;
   max-height: 420px;
@@ -59,14 +59,14 @@ canvas {
 }
 
 #timelinePanel{
-  width: 260px;
+  width: 240px;
   background: #f3f3f3;
   border: 1px solid #ccc;
   padding: 10px;
 }
 
 #timelinePanel canvas{
-  width: 260px;
+  width: auto;
   height: 400px;   /* キャンバスと同じ高さに合わせるなら後でJSで同期します */
   display: block;
   background: #e0e0e0;
@@ -97,29 +97,4 @@ canvas {
 }
 #toolbar button.is-active:hover {
   filter: brightness(0.95);
-}
-
-/* 3カラムの幅ルールを明示して安定化 */
-#snapshotListContainer {
-  flex: 0 0 240px;        /* ← 左は固定幅（好きな値に） */
-  width: 240px;
-  min-width: 240px;
-  box-sizing: border-box; /* padding/枠込みで300px */
-}
-
-#canvasWrapper {
-  flex: 1 1 auto;         /* ← 中央は余り幅を全部受ける（可変） */
-  min-width: 0;           /* Safari/iPadのはみ出しバグ対策 */
-}
-
-#timelinePanel {
-  flex: 0 0 240px;        /* ← 右も固定幅（好きな値に） */
-  width: 240px;
-  min-width: 240px;
-  box-sizing: border-box;
-}
-
-/* 右パネル内のキャンバスはパネル幅にフィット */
-#timelinePanel canvas {
-  width: 100%;
 }
