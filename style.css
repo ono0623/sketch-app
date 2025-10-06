@@ -1,145 +1,171 @@
-/* ================================
-   ベース安定化
-================================ */
-*, *::before, *::after { box-sizing: border-box; }
-
 body {
-  font-family: sans-serif;
+  font-family: "Segoe UI", sans-serif;
   margin: 0;
   padding: 0;
-  background: #ffffff;
-}
-
-/* ================================
-   ツールバー
-================================ */
-#toolbar {
-  margin: 10px;
-  display: flex;
-  gap: 10px;
-}
-#toolbar button.active,
-#toolbar button.is-active {
-  background: #1e90ff;
-  color: #fff;
-}
-
-/* ================================
-   3カラムレイアウト
-   （左：スナップショット／中：キャンバス／右：タイムライン）
-================================ */
-#main {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 12px;           /* ← 横のすき間（お好みで 8〜16px） */
-  flex-wrap: nowrap;   /* ← 折り返さない＝重なり防止 */
-  padding: 10px;
-}
-
-/* 左パネル：スナップショットリスト（固定幅・横スク禁止） */
-#snapshotListContainer {
-  flex: 0 0 210px;     /* ← 幅（200〜220pxでお好み） */
-  max-width: 210px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  /* max-height は JSで高さ同期するなら不要。固定したいなら値を入れてOK */
-  border: 1px solid #ccc;
-  padding: 8px;        /* 10→8でやや詰める */
-  background: #f9f9f9;
-}
-
-/* 中央：キャンバスラッパ（可変幅・重なり防止の min-width:0 が超重要） */
-#canvasWrapper {
+  background: #fafafa;
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;        /* ← Safari/iPad で中央が縮まず重なる問題の決め手 */
+  height: 100vh;
+  overflow: hidden;
 }
 
-/* 右パネル：タイムライン（固定幅） */
-#timelinePanel{
-  flex: 0 0 210px;     /* ← 幅（200〜220pxでお好み） */
-  max-width: 210px;
-  background: #f3f3f3;
+/* ツールバー（上部） */
+#toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: #fff;
+  border-bottom: 1px solid #ccc;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+button {
+  padding: 6px 10px;
+  font-size: 14px;
   border: 1px solid #ccc;
-  padding: 8px;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
-/* ================================
-   キャンバス類
-================================ */
-canvas {
+button:hover {
+  background: #f0f0f0;
+}
+
+button.is-active {
+  background: #007aff;
+  color: white;
+}
+
+/* メインエリア */
+#main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 180px 1fr 180px;
+  grid-template-rows: 1fr;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* スナップショットリスト */
+#snapshotList {
+  overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid #ccc;
   background: #fff;
+  padding: 6px;
+  border-radius: 6px;
+  box-sizing: border-box;
 }
 
-/* メインキャンバスは親幅にフィット（座標取得は getBoundingClientRect なのでOK） */
-#canvas {
+#snapshotList img {
   width: 100%;
   height: auto;
-  max-width: 900px;    /* ← 上限（800〜1000で好みのバランスに） */
-  display: block;      /* ← 行ボックスの隙を消す */
+  display: block;
+  border: 1px solid #ddd;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-/* タイムラインキャンバスは横100%（高さはJSで同期） */
-#timelinePanel canvas{
+/* キャンバス中央 */
+#canvas {
   width: 100%;
-  display: block;
-  /* height は JS の syncTimelineSize() で上書きされる想定 */
-  background: #e0e0e0;
-  border: 1px solid #bbb;
-}
-
-/* ================================
-   スナップショット内の見出し＆画像
-================================ */
-#snapshotListContainer h3,
-#timelinePanel h3 {
-  margin: 6px 0 8px;   /* 下の余白を詰める */
-  font-size: 14px;
-}
-
-/* サムネ画像は親幅にフィット（横スク無し） */
-#snapshotListContainer img {
-  width: 100% !important;   /* JSの width=160 を打ち消す */
-  height: auto !important;  /* JSの height=120 を打ち消す */
-  display: block;
-  border: 1px solid #ccc;
-}
-
-/* ================================
-   ストロークリスト
-================================ */
-#strokeList {
-  display: none;       /* ← 最初は非表示（トグルで表示） */
-  margin-top: 10px;
-  width: 600px;
-  overflow-y: auto;
-  max-height: 200px;
+  height: 100%;
   background: white;
   border: 1px solid #ccc;
-  padding: 10px;
+  border-radius: 6px;
+  display: block;
+  box-sizing: border-box;
+  touch-action: none;
 }
 
-.stroke-entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 5px;
+/* ストロークタイムライン */
+#timelineCanvas {
+  width: 100%;
+  height: 100%;
+  background: #f8f8f8;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
 }
 
-/* ================================
-   レスポンシブ（任意）
-   狭い画面で縦積みにしたい場合だけ有効化
-================================ */
-/*
+/* ストロークリスト（右下ポップアップ用） */
+#strokeList {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 280px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  padding: 8px;
+  display: none;
+}
+
+/* iPad用レスポンシブ調整 */
 @media (max-width: 1024px) {
-  #main { flex-wrap: wrap; }
-  #snapshotListContainer, #timelinePanel {
-    flex: 1 1 260px;
-    max-width: none;
+  #main {
+    grid-template-columns: 140px 1fr 140px;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  #toolbar {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  #snapshotList, #timelineCanvas {
+    border-radius: 4px;
+  }
+
+  button {
+    font-size: 13px;
+    padding: 4px 8px;
   }
 }
-*/
+
+/* さらに小さい画面では縦配置に */
+@media (max-width: 768px) {
+  #main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 160px 1fr 160px;
+    gap: 8px;
+    overflow-y: auto;
+  }
+
+  #snapshotList, #timelineCanvas {
+    height: auto;
+    max-height: 200px;
+  }
+}
+/* --- 末尾に追加 --- */
+
+/* 下部にわずかな余白を設けて「詰まり感」を解消 */
+#canvas,
+#timelineCanvas {
+  margin-bottom: 10px;  /* ←ここがポイント。見た目上ゆとりを作る */
+}
+
+/* iPadなど狭い画面でも下が切れないよう調整 */
+@media (max-width: 1024px) {
+  #canvas,
+  #timelineCanvas {
+    margin-bottom: 8px;
+  }
+}
