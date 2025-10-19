@@ -822,7 +822,7 @@ function listSnapshots() {
       // プレビュー画像
       const img = document.createElement('img');
       img.src = snapshot.preview;
-      img.width = 180
+      img.width = 200
       img.height = 135;
       img.style.border = '1px solid #ccc';
 
