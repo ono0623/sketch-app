@@ -822,8 +822,8 @@ function listSnapshots() {
       // プレビュー画像
       const img = document.createElement('img');
       img.src = snapshot.preview;
-      img.width = 200
-      img.height = 135;
+      img.width = 220
+      img.height = 155;
       img.style.border = '1px solid #ccc';
 
       // ホバー時に表示されるツールチップ
