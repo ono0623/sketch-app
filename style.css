@@ -58,7 +58,7 @@ canvas {
 }
 
 #timelinePanel {
-  width: 320px;  /* 260px → 320px に変更 */
+  width: 300px;  /* 260px → 320px に変更 */
   background: #f3f3f3;
   border: 1px solid #ccc;
   padding: 10px;
