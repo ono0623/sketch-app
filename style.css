@@ -62,9 +62,10 @@ canvas {
   background: #f3f3f3;
   border: 1px solid #ccc;
   padding: 10px;
+  box-sizing: border-box;  /* ← これを追加 */
 }
 
-#timelinePanel canvas{
+#timelinecanvas{
   width: 100%;
   height: 400px;   /* キャンバスと同じ高さに合わせるなら後でJSで同期します */
   display: block;
