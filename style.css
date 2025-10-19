@@ -66,7 +66,7 @@ canvas {
 }
 
 #timelinecanvas{
-  width: 100%;
+  width: 90%;
   height: 400px;   /* キャンバスと同じ高さに合わせるなら後でJSで同期します */
   display: block;
   background: #e0e0e0;
