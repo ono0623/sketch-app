@@ -6,9 +6,9 @@ body {
 }
 
 #toolbar {
-  margin: 10px;
+  margin: 5px;
   display: flex;
-  gap: 10px;
+  gap: 5px;
 }
 
 #main {
@@ -24,7 +24,8 @@ body {
   overflow-y: auto;
   max-height: 420px;
   border: 1px solid #ccc;
-  padding: 10px;
+  padding: 3px;
+  font-size: 12px;
   background: #f9f9f9;
 }
 
@@ -61,7 +62,8 @@ canvas {
   width: 300px;  /* 260px → 320px に変更 */
   background: #f3f3f3;
   border: 1px solid #ccc;
-  padding: 10px;
+  padding: 2px;
+  font-size: 12px;
   box-sizing: border-box;  /* ← これを追加 */
 }
 
@@ -77,9 +79,10 @@ canvas {
 #toolbar button {
   border: 1px solid #bbb;
   background: #fff;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 1px 3px;
+  border-radius: 3px;
   cursor: pointer;
+  font-size: 13px;
   transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 
