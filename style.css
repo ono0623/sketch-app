@@ -1,5 +1,3 @@
-/* このファイルは style.css として保存してください */
-
 body {
   font-family: sans-serif;
   margin: 0;
@@ -8,29 +6,26 @@ body {
 }
 
 #toolbar {
-  margin: 5px;
-  padding: 5px;
+  margin: 10px;
   display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
+  gap: 10px;
 }
 
 #main {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 5px;
-  padding: 5px;
+  gap: 10px;
+  padding: 10px;
 }
 
 #snapshotListContainer {
-  width: 240px;
+  width: 280px;  /* 200px → 280px に変更 */
   overflow-y: auto;
   max-height: 420px;
   border: 1px solid #ccc;
-  padding: 5px;
+  padding: 10px;
   background: #f9f9f9;
-  flex-shrink: 0;
 }
 
 #canvasWrapper {
@@ -45,7 +40,7 @@ canvas {
 }
 
 #strokeList {
-  display: none;
+  display: none; /* ← 最初は非表示 */
   margin-top: 10px;
   width: 600px;
   overflow-y: auto;
@@ -63,21 +58,21 @@ canvas {
 }
 
 #timelinePanel {
-  width: 300px;
+  width: 320px;  /* 260px → 320px に変更 */
   background: #f3f3f3;
   border: 1px solid #ccc;
-  padding: 5px;
-  flex-shrink: 0;
+  padding: 10px;
 }
 
-#timelinePanel canvas {
+#timelinePanel canvas{
   width: 100%;
-  height: 400px;
+  height: 400px;   /* キャンバスと同じ高さに合わせるなら後でJSで同期します */
   display: block;
   background: #e0e0e0;
   border: 1px solid #bbb;
 }
 
+/* ツールボタンの共通見た目（任意で微調整してOK） */
 #toolbar button {
   border: 1px solid #bbb;
   background: #fff;
@@ -87,21 +82,24 @@ canvas {
   transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 
+/* アクティブ状態を青く */
 #toolbar button.is-active {
-  background: #1677ff;
+  background: #1677ff;      /* ブルー */
   color: #fff;
   border-color: #1677ff;
   box-shadow: 0 0 0 2px rgba(22,119,255,0.2);
 }
 
+/* ホバー時のちょい強調 */
 #toolbar button:hover {
   border-color: #888;
 }
-
 #toolbar button.is-active:hover {
   filter: brightness(0.95);
 }
 
-#canvas, #timelineCanvas {
-  touch-action: none;
+/* 末尾に追加 */
+#canvas,
+#timelineCanvas {
+  touch-action: none;        /* 指ジェスチャでのスクロール/ズームを抑止 */
 }
