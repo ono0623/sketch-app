@@ -1,3 +1,5 @@
+/* このファイルは style.css として保存してください */
+
 body {
   font-family: sans-serif;
   margin: 0;
@@ -9,7 +11,6 @@ body {
   margin: 10px;
   display: flex;
   gap: 10px;
-  flex-wrap: wrap;
 }
 
 #main {
@@ -18,7 +19,6 @@ body {
   align-items: flex-start;
   gap: 10px;
   padding: 10px;
-  min-height: calc(100vh - 80px);
 }
 
 #snapshotListContainer {
@@ -35,14 +35,11 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex: 1;
-  min-width: 0;
 }
 
 canvas {
   border: 1px solid #ccc;
   background: rgb(255, 255, 255);
-  max-width: 100%;
 }
 
 #strokeList {

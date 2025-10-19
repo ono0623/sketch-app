@@ -1,8 +1,71 @@
-console.log("✅ script.js 読み込まれました！");
+console.log("✅ app.js 読み込まれました！");
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const timelineCanvas = document.getElementById('timelineCanvas');
+const tl = timelineCanvas.getContext('2d');
 
+// ★ Canvas サイズを初期化する関数（DPI対応）
+function initializeCanvases() {
+  const dpr = window.devicePixelRatio || 1;
+  
+  // メインキャンバス
+  const canvasWrapper = document.getElementById('canvasWrapper');
+  const wrapperWidth = canvasWrapper.clientWidth - 20;
+  const wrapperHeight = canvasWrapper.clientHeight - 20;
+  
+  canvas.style.width = wrapperWidth + 'px';
+  canvas.style.height = wrapperHeight + 'px';
+  
+  canvas.width = wrapperWidth * dpr;
+  canvas.height = wrapperHeight * dpr;
+  ctx.scale(dpr, dpr);
+  
+  // タイムラインキャンバス
+  const timelinePanel = document.getElementById('timelinePanel');
+  const tlWidth = timelinePanel.clientWidth - 20;
+  const tlHeight = timelinePanel.clientHeight - 40;
+  
+  timelineCanvas.style.width = tlWidth + 'px';
+  timelineCanvas.style.height = tlHeight + 'px';
+  
+  timelineCanvas.width = tlWidth * dpr;
+  timelineCanvas.height = tlHeight * dpr;
+  tl.scale(dpr, dpr);
+  
+  console.log(`Canvas initialized: ${wrapperWidth}x${wrapperHeight} (DPR: ${dpr})`);
+}
+
+// ★ 起動時に初期化
+window.addEventListener('load', () => {
+  setTimeout(initializeCanvases, 100);
+});
+
+// ★ ウィンドウリサイズ時に再初期化
+window.addEventListener('resize', initializeCanvases);
+
+// ★ 修正版：DPI対応の座標取得
+function getMousePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  
+  return {
+    x: (e.clientX - rect.left) * dpr,
+    y: (e.clientY - rect.top) * dpr
+  };
+}
+
+function getMousePosOnTimeline(e) {
+  const rect = timelineCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  
+  return {
+    x: (e.clientX - rect.left) * dpr,
+    y: (e.clientY - rect.top) * dpr
+  };
+}
+
+// ★ その他の変数・初期化は元のコードと同じ
 let drawing = false;
 let lassoMode = false;
 let lassoStart = null;
@@ -16,10 +79,10 @@ let currentPath = [];
 let startTime = 0;
 let selectedStrokes = new Set();
 let altPressed = false;
-// タイムライン用：描画済みストロークの座標キャッシュ & 投げ縄座標
-let timelineLayout = [];  // [{ index, id, active, points:[{x,y}], bbox:{minX,minY,maxX,maxY} }, ...]
+
+let timelineLayout = [];
 let timelineLassoStart = null;
-let timelineLassoEnd   = null;
+let timelineLassoEnd = null;
 
 const penBtn = document.getElementById('pen');
 const colorPicker = document.getElementById('colorPicker');
@@ -31,15 +94,12 @@ const sizeSlider = document.getElementById('size');
 const lassoBtn = document.getElementById('lasso');
 const toggleStrokeListBtn = document.getElementById('toggleStrokeListBtn');
 const strokeListEl = document.getElementById('strokeList');
-const INACTIVE_ALPHA_WHEN_ALT = 0.15; // Alt中に非表示ストロークをどれくらい薄く描くか
-// タイムラインの投げ縄は非表示ストロークも常に選択対象にする
+
+const INACTIVE_ALPHA_WHEN_ALT = 0.15;
 const TIMELINE_LASSO_INCLUDES_INACTIVE = true;
 
 const showInactiveBtn = document.getElementById('showInactiveBtn');
-let showInactive = false; // ← iPad用トグル
-
-const timelineCanvas = document.getElementById('timelineCanvas');
-const tl = timelineCanvas.getContext('2d');
+let showInactive = false;
 
 const DB_NAME = 'SketchAppDB';
 const STORE_NAME = 'snapshots';
@@ -49,21 +109,18 @@ let db;
 
 const openDB = () => {
   const request = indexedDB.open(DB_NAME, DB_VERSION);
-
   request.onupgradeneeded = e => {
     db = e.target.result;
     if (!db.objectStoreNames.contains(STORE_NAME)) {
       db.createObjectStore(STORE_NAME, { keyPath: 'id' });
     }
   };
-
   request.onsuccess = () => {
     db = request.result;
     listSnapshots();
-    loadAllPathsFromDB();    // ← ① まずストロークデータを復元
-    loadLatestSnapshot();    // ← ② 次に最新スナップショットの active 状態だけ適用
+    loadAllPathsFromDB();
+    loadLatestSnapshot();
   };
-
   request.onerror = e => {
     console.error('IndexedDB open error:', e.target.errorCode);
   };
