@@ -94,6 +94,13 @@ canvas {
   box-shadow: 0 0 0 2px rgba(22,119,255,0.2);
 }
 
+#showInactiveBtn.active {
+  background: #1677ff;
+  color: #fff;
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22,119,255,0.2);
+}
+
 /* ホバー時のちょい強調 */
 #toolbar button:hover {
   border-color: #888;
