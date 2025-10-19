@@ -390,11 +390,15 @@ function calcLength(points) {
 }
 
 function drawTimeline() {
-  if (!timelineCanvas || !tl) return;
+if (!timelineCanvas || !tl) return;
 
   const dpr = window.devicePixelRatio || 1;
-  const cssW = timelineCanvas.clientWidth;
-  const cssH = timelineCanvas.clientHeight;  // ← タイムライン自身の高さを使用
+  let cssW = timelineCanvas.clientWidth;
+  const cssH = timelineCanvas.clientHeight;
+  
+  // ★ cssW を 200px に制限
+  cssW = Math.min(cssW, 200);
+  
   if (timelineCanvas.width !== Math.floor(cssW * dpr) ||
       timelineCanvas.height !== Math.floor(cssH * dpr)) {
     timelineCanvas.width  = Math.floor(cssW * dpr);
