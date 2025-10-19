@@ -246,9 +246,11 @@ window.addEventListener('keyup', e => {
 
 function getMousePos(e) {
   const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  
   return {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top
+    x: (e.clientX - rect.left) * dpr,
+    y: (e.clientY - rect.top) * dpr
   };
 }
 
@@ -871,9 +873,11 @@ document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
 
 function getMousePosOnTimeline(e) {
   const rect = timelineCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  
   return {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top
+    x: (e.clientX - rect.left) * dpr,
+    y: (e.clientY - rect.top) * dpr
   };
 }
 
