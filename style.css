@@ -20,7 +20,7 @@ body {
 }
 
 #snapshotListContainer {
-  width: 280px;  /* 200px → 280px に変更 */
+  width: 380px;  /* 200px → 280px に変更 */
   overflow-y: auto;
   max-height: 420px;
   border: 1px solid #ccc;
