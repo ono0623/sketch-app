@@ -352,8 +352,8 @@ function listSnapshots() {
       div.style.marginBottom = '10px';
       const img = document.createElement('img');
       img.src = snapshot.preview;
-      img.width = 213;
-      img.height = 155;
+      img.width = 170;
+      img.height = 110;
       img.style.border = '1px solid #ccc';
       const ts = new Date(snapshot.timestamp).toLocaleString();
       img.title = ts;
