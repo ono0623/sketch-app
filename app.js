@@ -50,19 +50,35 @@ const PATHS_RECORD_ID = 'paths';
 const DB_VERSION = 1;
 let db;
 
-// 操作カウント
+// 操作カウント（クリック回数と実行回数の両方）
 let operationCounts = {
-  pen: 0,
-  lasso: 0,
-  undo: 0,
-  redo: 0,
-  clear: 0,
-  save: 0,
-  export: 0,
-  import: 0,
-  toggleSelected: 0,
-  toggleStrokeList: 0,
-  showInactive: 0,
+  // クリック回数（ボタンを押した回数）
+  penClick: 0,
+  lassoClick: 0,
+  undoClick: 0,
+  redoClick: 0,
+  clearClick: 0,
+  saveClick: 0,
+  exportClick: 0,
+  importClick: 0,
+  toggleSelectedClick: 0,
+  toggleStrokeListClick: 0,
+  showInactiveClick: 0,
+  
+  // 実行回数（実際に動作した回数）
+  penExecuted: 0,
+  lassoExecuted: 0,
+  undoExecuted: 0,
+  redoExecuted: 0,
+  clearExecuted: 0,
+  saveExecuted: 0,
+  exportExecuted: 0,
+  importExecuted: 0,
+  toggleSelectedExecuted: 0,
+  toggleStrokeListExecuted: 0,
+  showInactiveExecuted: 0,
+  
+  // その他
   snapshotSwitch: 0,
   toggleActive: 0,
   strokeDrawn: 0
@@ -180,8 +196,9 @@ function loadAllPathsFromDB() {
 }
 
 async function exportAllData() {
-  operationCounts.export++;
-  console.log('Export count:', operationCounts.export);
+  operationCounts.exportClick++;
+  operationCounts.exportExecuted++;
+  console.log('Export - Click:', operationCounts.exportClick, 'Executed:', operationCounts.exportExecuted);
   
   const tx1 = db.transaction([STORE_NAME], 'readonly');
   const store1 = tx1.objectStore(STORE_NAME);
@@ -220,11 +237,14 @@ async function exportAllData() {
 }
 
 function handleImportFile(evt) {
-  operationCounts.import++;
-  console.log('Import count:', operationCounts.import);
+  operationCounts.importClick++;
   
   const file = evt.target.files[0];
   if (!file) return;
+  
+  operationCounts.importExecuted++;
+  console.log('Import - Click:', operationCounts.importClick, 'Executed:', operationCounts.importExecuted);
+  
   const reader = new FileReader();
   reader.onload = async () => {
     try {
@@ -271,8 +291,9 @@ function handleImportFile(evt) {
 }
 
 function saveSnapshot() {
-  operationCounts.save++;
-  console.log('Save count:', operationCounts.save);
+  operationCounts.saveClick++;
+  operationCounts.saveExecuted++;
+  console.log('Save - Click:', operationCounts.saveClick, 'Executed:', operationCounts.saveExecuted);
   
   if (!db) return;
   const id = `snapshot-${Date.now()}`;
@@ -331,8 +352,8 @@ function listSnapshots() {
       div.style.marginBottom = '10px';
       const img = document.createElement('img');
       img.src = snapshot.preview;
-      img.width = 160;
-      img.height = 120;
+      img.width = 213;
+      img.height = 155;
       img.style.border = '1px solid #ccc';
       const ts = new Date(snapshot.timestamp).toLocaleString();
       img.title = ts;
@@ -652,38 +673,47 @@ colorPicker.addEventListener('input', (e) => {
 });
 
 penBtn.addEventListener('click', () => {
-  operationCounts.pen++;
-  console.log('Pen count:', operationCounts.pen);
+  operationCounts.penClick++;
+  if (lassoMode) {
+    operationCounts.penExecuted++;
+  }
+  console.log('Pen - Click:', operationCounts.penClick, 'Executed:', operationCounts.penExecuted);
   setMode('pen');
 });
 
 lassoBtn.addEventListener('click', () => {
-  operationCounts.lasso++;
-  console.log('Lasso count:', operationCounts.lasso);
+  operationCounts.lassoClick++;
+  if (!lassoMode) {
+    operationCounts.lassoExecuted++;
+  }
+  console.log('Lasso - Click:', operationCounts.lassoClick, 'Executed:', operationCounts.lassoExecuted);
   setMode('lasso');
 });
 
 undoBtn.addEventListener('click', () => {
-  operationCounts.undo++;
-  console.log('Undo count:', operationCounts.undo);
+  operationCounts.undoClick++;
   if (paths.length > 0) {
+    operationCounts.undoExecuted++;
     redoStack.push(paths.pop());
     updateStrokeList();
   }
+  console.log('Undo - Click:', operationCounts.undoClick, 'Executed:', operationCounts.undoExecuted);
 });
 
 redoBtn.addEventListener('click', () => {
-  operationCounts.redo++;
-  console.log('Redo count:', operationCounts.redo);
+  operationCounts.redoClick++;
   if (redoStack.length > 0) {
+    operationCounts.redoExecuted++;
     paths.push(redoStack.pop());
     updateStrokeList();
   }
+  console.log('Redo - Click:', operationCounts.redoClick, 'Executed:', operationCounts.redoExecuted);
 });
 
 clearBtn.addEventListener('click', () => {
-  operationCounts.clear++;
-  console.log('Clear count:', operationCounts.clear);
+  operationCounts.clearClick++;
+  operationCounts.clearExecuted++;
+  console.log('Clear - Click:', operationCounts.clearClick, 'Executed:', operationCounts.clearExecuted);
   saveSnapshot();
   paths.forEach(path => path.active = false);
   redoStack = [];
@@ -696,8 +726,9 @@ saveBtn.addEventListener('click', () => {
 });
 
 showInactiveBtn.addEventListener('click', () => {
-  operationCounts.showInactive++;
-  console.log('Show Inactive count:', operationCounts.showInactive);
+  operationCounts.showInactiveClick++;
+  operationCounts.showInactiveExecuted++;
+  console.log('Show Inactive - Click:', operationCounts.showInactiveClick, 'Executed:', operationCounts.showInactiveExecuted);
   showInactive = !showInactive;
   showInactiveBtn.classList.toggle('active', showInactive);
   showInactiveBtn.setAttribute('aria-pressed', String(showInactive));
@@ -706,8 +737,9 @@ showInactiveBtn.addEventListener('click', () => {
 });
 
 toggleStrokeListBtn.addEventListener('click', () => {
-  operationCounts.toggleStrokeList++;
-  console.log('Toggle Stroke List count:', operationCounts.toggleStrokeList);
+  operationCounts.toggleStrokeListClick++;
+  operationCounts.toggleStrokeListExecuted++;
+  console.log('Toggle Stroke List - Click:', operationCounts.toggleStrokeListClick, 'Executed:', operationCounts.toggleStrokeListExecuted);
   if (strokeListEl.style.display === 'none' || strokeListEl.style.display === '') {
     strokeListEl.style.display = 'block';
   } else {
@@ -716,12 +748,15 @@ toggleStrokeListBtn.addEventListener('click', () => {
 });
 
 document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
-  operationCounts.toggleSelected++;
-  console.log('Toggle Selected count:', operationCounts.toggleSelected);
-  selectedStrokes.forEach(index => {
-    paths[index].active = !paths[index].active;
-  });
-  updateStrokeList();
+  operationCounts.toggleSelectedClick++;
+  if (selectedStrokes.size > 0) {
+    operationCounts.toggleSelectedExecuted++;
+    selectedStrokes.forEach(index => {
+      paths[index].active = !paths[index].active;
+    });
+    updateStrokeList();
+  }
+  console.log('Toggle Selected - Click:', operationCounts.toggleSelectedClick, 'Executed:', operationCounts.toggleSelectedExecuted);
 });
 
 exportBtn.addEventListener('click', exportAllData);
@@ -735,8 +770,20 @@ window.addEventListener('keydown', e => {
     updateStrokeList();
   }
   if (e.target && !/input|textarea|select/i.test(e.target.tagName)) {
-    if (e.key === 'v' || e.key === 'V') setMode('pen');
-    if (e.key === 'l' || e.key === 'L') setMode('lasso');
+    if (e.key === 'v' || e.key === 'V') {
+      operationCounts.penClick++;
+      if (lassoMode) {
+        operationCounts.penExecuted++;
+      }
+      setMode('pen');
+    }
+    if (e.key === 'l' || e.key === 'L') {
+      operationCounts.lassoClick++;
+      if (!lassoMode) {
+        operationCounts.lassoExecuted++;
+      }
+      setMode('lasso');
+    }
   }
 });
 
@@ -878,6 +925,42 @@ timelineCanvas.addEventListener('mouseup', (e) => {
   updateStrokeList();
   redraw();
 });
+
+
+async function exportOperationCountsAsCSV() {
+  // CSVのヘッダー行
+  let csv = 'Operation,Click Count,Executed Count\n';
+  
+  // 各操作のデータ行
+  csv += `Pen,${operationCounts.penClick},${operationCounts.penExecuted}\n`;
+  csv += `Lasso,${operationCounts.lassoClick},${operationCounts.lassoExecuted}\n`;
+  csv += `Undo,${operationCounts.undoClick},${operationCounts.undoExecuted}\n`;
+  csv += `Redo,${operationCounts.redoClick},${operationCounts.redoExecuted}\n`;
+  csv += `Clear,${operationCounts.clearClick},${operationCounts.clearExecuted}\n`;
+  csv += `Save,${operationCounts.saveClick},${operationCounts.saveExecuted}\n`;
+  csv += `Export,${operationCounts.exportClick},${operationCounts.exportExecuted}\n`;
+  csv += `Import,${operationCounts.importClick},${operationCounts.importExecuted}\n`;
+  csv += `Toggle Selected,${operationCounts.toggleSelectedClick},${operationCounts.toggleSelectedExecuted}\n`;
+  csv += `Toggle Stroke List,${operationCounts.toggleStrokeListClick},${operationCounts.toggleStrokeListExecuted}\n`;
+  csv += `Show Inactive,${operationCounts.showInactiveClick},${operationCounts.showInactiveExecuted}\n`;
+  csv += `Snapshot Switch,${operationCounts.snapshotSwitch},-\n`;
+  csv += `Toggle Active,${operationCounts.toggleActive},-\n`;
+  csv += `Stroke Drawn,${operationCounts.strokeDrawn},-\n`;
+  
+  // BOMを付けてUTF-8で保存（Excelで文字化け防止）
+  const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+  const blob = new Blob([bom, csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `operation-counts-${new Date().toISOString()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+const exportCsvBtn = document.getElementById('exportCsvBtn');
+exportCsvBtn.addEventListener('click', exportOperationCountsAsCSV);
 
 timelineCanvas.addEventListener('touchstart', (e) => {
   if (!lassoMode) return;
