@@ -6,16 +6,35 @@
   <title>Sketch App</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  
+  <!-- ▼ ここが toolbar（新しい Pen 設定付き） -->
   <div id="toolbar">
-    <button id="pen">Pen</button>
-     <button id="lasso">Lasso</button>
-    <span class="label">Size</span>
-    <input type="range" id="size" min="1" max="20" value="2">
-    <span class="label">Color</span>
-    <input type="color" id="colorPicker" value="#000000">
+    <!-- Pen＋設定ポップアップ -->
+    <div class="tool-group">
+      <button id="pen">Pen</button>
+      <!-- ▼ここが「Pen設定を開くボタン」 -->
+      <button id="penConfigBtn" class="pen-config-trigger" aria-haspopup="true" aria-expanded="false">▼</button>
+
+      <!-- ▼ここがポップアップ本体：中にSizeとColorのUIを移動 -->
+      <div id="penConfigPanel" class="pen-config-panel" role="dialog" aria-label="Pen settings">
+        <div class="config-row">
+          <span class="label">Size</span>
+          <input type="range" id="size" min="1" max="20" value="2">
+        </div>
+        <div class="config-row">
+          <span class="label">Color</span>
+          <input type="color" id="colorPicker" value="#000000">
+        </div>
+      </div>
+    </div>
+
+    <!-- ここから下はボタンだけ -->
+    <button id="lasso">Lasso</button>
+    <button id="move">Move</button>
+
     <button id="toggleSelectedBtn">ToggleSelected</button>
+    <button id="isolateSelectedBtn">IsolateSelected</button>
     <button id="showInactiveBtn" aria-pressed="false">ShowInactive</button>
     <button id="toggleStrokeListBtn">ShowStrokeList</button>
     <button id="undo">Undo</button>
@@ -25,15 +44,21 @@
     <button id="exportBtn">Export</button>
     <input type="file" id="importInput" accept=".json" style="display:none">
     <button id="importBtn">Import</button>
+    <button id="loadOverlayBtn">LoadOverlay</button>
+  <input type="file" id="overlayInput" accept=".json" style="display:none">
+  <button id="applyOverlayBtn" disabled>ApplyOverlay</button>
+  <button id="cancelOverlayBtn" disabled>CancelOverlay</button>
     <button id="exportCsvBtn">Export CSV</button>
-    
-
   </div>
+  <!-- ▲ ここできちんと toolbar が閉じていることを確認！ -->
 
+  <!-- ▼ ここから main。toolbar の外（=隣）にあるのが重要 -->
   <div id="main">
     <div id="snapshotListContainer">
-      
       <div id="snapshotList"></div>
+
+      <!-- オーバーレイ用スナップショット一覧 -->
+      <div id="overlaySnapshotList"></div>
     </div>
 
     <div id="canvasWrapper">
@@ -41,14 +66,14 @@
       <div id="strokeList"></div>
     </div>
 
-    <!-- 追加：右側のタイムライン -->
+    <!-- 右側のタイムライン -->
     <div id="timelinePanel">
-      
       <canvas id="timelineCanvas" width="150" height="400"></canvas>
     </div>
-
   </div>
 
   <script src="app.js" defer></script>
 </body>
+
+
 </html>
