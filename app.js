@@ -88,7 +88,52 @@ const DB_NAME = 'SketchAppDB';
 const STORE_NAME = 'snapshots';
 const PATHS_RECORD_ID = 'paths';
 const DB_VERSION = 1;
+const MAX_HISTORY = 100; //履歴の最大数
 let db;
+
+
+function cloneStateForHistory() {
+  return {
+    // paths 全体（points も含めてディープコピー）
+    paths: paths.map(p => ({
+      ...p,
+      points: (p.points || []).map(pt => ({ ...pt }))
+    })),
+    // Move 用の currentTransforms
+    currentTransforms: JSON.parse(JSON.stringify(currentTransforms || {})),
+    // 選択中ストローク
+    selectedStrokes: Array.from(selectedStrokes),
+  };
+}
+
+
+function restoreHistoryState(state) {
+  if (!state) return;
+
+  paths = (state.paths || []).map(p => ({
+    ...p,
+    points: (p.points || []).map(pt => ({ ...pt }))
+  }));
+
+  currentTransforms = JSON.parse(JSON.stringify(state.currentTransforms || {}));
+  selectedStrokes = new Set(state.selectedStrokes || []);
+
+  updateStrokeList();   // 中で redraw() も呼ばれる
+  redraw();
+  saveAllPathsToDB();   // DB も現在状態に合わせておく
+}
+
+function pushUndoState() {
+  const snapshot = cloneStateForHistory();
+  undoStack.push(snapshot);
+  if (undoStack.length > MAX_HISTORY) {
+    undoStack.shift(); // 古い履歴を捨てる
+  }
+  // 新しい操作が入ったので Redo はクリア
+  redoStack = [];
+   updateUndoRedoButtons();
+}
+
 
 
 // --- Pen 設定ポップアップの開閉 ---
@@ -443,23 +488,41 @@ function handleOverlayFile(evt) {
 isolateSelectedBtn.addEventListener('click', () => {
   // 何も選択されていなかったら何もしない
   if (selectedStrokes.size === 0) {
-    alert('Lsassoでストロークを選択してください。');
+    alert('Lassoでストロークを選択してください。');
     return;
   }
 
-  // 選択されている index の集合を作る
-  const selectedIndexSet = new Set(selectedStrokes);
+  //Isolate の前に状態を履歴に保存
+  pushUndoState();
 
-  // 選択されたものだけ active = true、それ以外は false
+  const selectedIndexSet = new Set(selectedStrokes);
+  const newSelected = new Set(selectedStrokes);
+  const justIsolated = [];
+
   paths.forEach((path, i) => {
-    path.active = selectedIndexSet.has(i);
+    const wasActive = path.active;
+
+    if (selectedIndexSet.has(i)) {
+      path.active = true;
+    } else {
+      if (wasActive) {
+        path.active = false;
+        justIsolated.push(i);
+      }
+    }
   });
 
-  // UI 更新＋保存
+  justIsolated.forEach(i => newSelected.add(i));
+  selectedStrokes = newSelected;
+
   updateStrokeList();
   redraw();
   saveAllPathsToDB();
 });
+
+
+
+
 
 
 // 現在の「アクティブなストローク」だけを描いたプレビュー画像を返す
@@ -519,7 +582,7 @@ function saveSnapshot() {
   if (!db) return;
   const id = `snapshot-${Date.now()}`;
 
-  // ★ ここを変更：アクティブストロークだけでプレビューを生成
+  //ここを変更：アクティブストロークだけでプレビューを生成
   const preview = generateSnapshotPreviewFromActiveStrokes();
 
   const activeIds = paths.filter(p => p.active).map(p => p.id);
@@ -595,7 +658,7 @@ function listSnapshots() {
     // DB から snapshot-* のレコードだけ抽出
     const snaps = request.result.filter(r => r.id.startsWith('snapshot-'));
 
-    // ★ ハイライト判定用のメタ情報を作る
+    //ハイライト判定用のメタ情報を作る
     snapshotMeta = snaps.map(s => {
       const ids =
         Array.isArray(s.activeIds) ? s.activeIds :
@@ -608,7 +671,7 @@ function listSnapshots() {
       };
     });
 
-    // ★ サムネ描画
+    //サムネ描画
     snaps.forEach(snapshot => {
       const div = document.createElement('div');
       div.style.marginBottom = '10px';
@@ -625,7 +688,7 @@ function listSnapshots() {
       img.addEventListener('click', () => loadSnapshotById(snapshot.id));
       div.appendChild(img);
 
-      // ★ オーバーレイインポートしたスナップショットなら見た目を変える
+      //オーバーレイインポートしたスナップショットなら見た目を変える
       if (snapshot.originalSnapshotId) {
         div.classList.add('snapshot-imported');
 
@@ -638,7 +701,7 @@ function listSnapshots() {
       list.appendChild(div);
     });
 
-    // ★ 選択ストロークに応じたハイライトを反映
+    //選択ストロークに応じたハイライトを反映
     highlightSnapshotsForSelection();
   };
 }
@@ -811,11 +874,12 @@ function updateModeUI() {
   }
 }
 
+
 function setMode(mode) {
   // mode: 'pen' | 'lasso' | 'move'
   currentTool = mode;
 
-  // 既存コードが lassoMode を参照しているので、ここだけ同期しておく
+  // 既存コードが lassoMode を参照しているので、ここだけ同期
   lassoMode = (mode === 'lasso');
 
   // モード切り替え時に状態をリセット
@@ -826,14 +890,19 @@ function setMode(mode) {
   timelineLassoStart = null;
   timelineLassoEnd = null;
 
-  // 選択状態は維持したほうが便利なのでそのまま残す
-  // （もしモード切り替えで選択も消したいなら下行を有効化）
-  // selectedStrokes.clear();
+  //Pen に切り替えたときは選択状態をリセットする
+  if (mode === 'pen') {
+    selectedStrokes.clear();
+  }
 
   updateModeUI();
   redraw();
   updateStrokeList();
 }
+
+
+
+
 
 // 描画関数
 
@@ -1006,7 +1075,6 @@ function drawTimeline() {
 }
 
 
-
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1015,15 +1083,22 @@ function redraw() {
     const isSelected = selectedStrokes.has(i);
     const isInactive = !path.active;
     const revealInactive = altPressed || showInactive;
+
+    // inactive かつ、Alt も ShowInactive もオフ、かつ選択もされていない → 描かない
     if (isInactive && !revealInactive && !isSelected) return;
 
     ctx.save();
+
+    // 選択中は点線
     ctx.setLineDash(isSelected ? [6, 4] : []);
+
+    // inactive は常に 15%、active は 100%
     if (isInactive) {
-      ctx.globalAlpha = isSelected ? 0.15 : 0.15;
+      ctx.globalAlpha = 0.15;
     } else {
       ctx.globalAlpha = 1.0;
     }
+
     ctx.strokeStyle = path.color;
     ctx.lineWidth = path.size;
     ctx.lineCap = 'round';
@@ -1048,6 +1123,7 @@ function redraw() {
       }
       ctx.stroke();
     }
+
     ctx.restore();
   });
 
@@ -1089,6 +1165,8 @@ function redraw() {
 
   drawTimeline();
 }
+
+
 
 
 
@@ -1179,7 +1257,7 @@ function highlightSnapshotsForSelection() {
       if (!badge) {
         badge = document.createElement('div');
         badge.className = 'snapshot-selected-badge';
-        badge.textContent = 'Sel'; // 好きに変えてOK（●とか★とか）
+        badge.textContent = 'Sel'; 
         child.appendChild(badge);
       }
     } else {
@@ -1192,25 +1270,33 @@ function highlightSnapshotsForSelection() {
 }
 
 
-
-
-
 function toggleActive(index) {
   operationCounts.toggleActiveHistory.push(Date.now());
   console.log('Toggle Active count:', operationCounts.toggleActiveHistory.length);
-  
+
+  //このストロークの active を変える前に状態を履歴に積む
+  pushUndoState();
+
   paths[index].active = !paths[index].active;
   updateStrokeList();
   redraw();
   saveAllPathsToDB();
 }
 
+
+
+
 function selectStrokesInLasso(p1, p2) {
+  //選択状態が変わる前に履歴を積む
+  pushUndoState();
+
   const minX = Math.min(p1.x, p2.x);
   const minY = Math.min(p1.y, p2.y);
   const maxX = Math.max(p1.x, p2.x);
   const maxY = Math.max(p1.y, p2.y);
+
   selectedStrokes.clear();
+
   const revealInactive = altPressed || showInactive;
   paths.forEach((path, i) => {
     if (!path.active && !revealInactive) return;
@@ -1223,19 +1309,35 @@ function selectStrokesInLasso(p1, p2) {
   });
 }
 
+
 function selectStrokesInTimelineLasso(p1, p2) {
   if (!timelineLayout || timelineLayout.length === 0) return;
+
+  //選択状態が変わる前に履歴を積む
+  pushUndoState();
+
   const minX = Math.min(p1.x, p2.x);
   const minY = Math.min(p1.y, p2.y);
   const maxX = Math.max(p1.x, p2.x);
   const maxY = Math.max(p1.y, p2.y);
-  const inRect = (pt) => (pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY);
+
+  const inRect = (pt) =>
+    pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY;
+
   selectedStrokes.clear();
+
   for (const item of timelineLayout) {
     if (!item.active && !TIMELINE_LASSO_INCLUDES_INACTIVE && !altPressed) continue;
+
     const b = item.bbox;
-    const bboxOverlap = !(b.maxX < minX || b.minX > maxX || b.maxY < minY || b.minY > maxY);
+    const bboxOverlap = !(
+      b.maxX < minX ||
+      b.minX > maxX ||
+      b.maxY < minY ||
+      b.minY > maxY
+    );
     if (!bboxOverlap) continue;
+
     let hit = false;
     for (const pt of item.points) {
       if (inRect(pt)) {
@@ -1246,6 +1348,7 @@ function selectStrokesInTimelineLasso(p1, p2) {
     if (hit) selectedStrokes.add(item.index);
   }
 }
+
 
 // イベントリスナー
 sizeSlider.addEventListener('input', (e) => {
@@ -1283,23 +1386,68 @@ if (moveBtn) {
 
 undoBtn.addEventListener('click', () => {
   operationCounts.undoClicks.push(Date.now());
-  if (paths.length > 0) {
+
+  if (undoStack.length > 0) {
     operationCounts.undoExecuted.push(Date.now());
-    redoStack.push(paths.pop());
-    updateStrokeList();
+
+    // 現在の状態を Redo 用に積む
+    const current = cloneStateForHistory();
+    redoStack.push(current);
+
+    // 1つ前の状態を取り出して復元
+    const prev = undoStack.pop();
+    restoreHistoryState(prev);
   }
+
   console.log('Undo - Clicks:', operationCounts.undoClicks.length, 'Executed:', operationCounts.undoExecuted.length);
+  updateUndoRedoButtons();
 });
 
 redoBtn.addEventListener('click', () => {
   operationCounts.redoClicks.push(Date.now());
+
   if (redoStack.length > 0) {
     operationCounts.redoExecuted.push(Date.now());
-    paths.push(redoStack.pop());
-    updateStrokeList();
+
+    // 現在を Undo 用に積み直す
+    const current = cloneStateForHistory();
+    undoStack.push(current);
+
+    // Redo 側から1つ取り出して復元
+    const next = redoStack.pop();
+    restoreHistoryState(next);
   }
+
   console.log('Redo - Clicks:', operationCounts.redoClicks.length, 'Executed:', operationCounts.redoExecuted.length);
+  updateUndoRedoButtons();
 });
+
+
+function updateUndoRedoButtons() {
+  // Undo
+  if (undoStack.length > 0) {
+    undoBtn.disabled = false;
+    undoBtn.style.opacity = "1.0";      // 白（有効）
+    undoBtn.style.cursor = "pointer";
+  } else {
+    undoBtn.disabled = true;
+    undoBtn.style.opacity = "0.4";      // 灰色（無効）
+    undoBtn.style.cursor = "default";
+  }
+
+  // Redo
+  if (redoStack.length > 0) {
+    redoBtn.disabled = false;
+    redoBtn.style.opacity = "1.0";      // 白（有効）
+    redoBtn.style.cursor = "pointer";
+  } else {
+    redoBtn.disabled = true;
+    redoBtn.style.opacity = "0.4";      // 灰色（無効）
+    redoBtn.style.cursor = "default";
+  }
+}
+
+
 
 clearBtn.addEventListener('click', () => {
   operationCounts.clearClicks.push(Date.now());
@@ -1342,6 +1490,10 @@ document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
   operationCounts.toggleSelectedClicks.push(Date.now());
   if (selectedStrokes.size > 0) {
     operationCounts.toggleSelectedExecuted.push(Date.now());
+
+    //アクティブ切り替え前に履歴を積む
+    pushUndoState();
+
     selectedStrokes.forEach(index => {
       paths[index].active = !paths[index].active;
     });
@@ -1349,6 +1501,7 @@ document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
   }
   console.log('Toggle Selected - Clicks:', operationCounts.toggleSelectedClicks.length, 'Executed:', operationCounts.toggleSelectedExecuted.length);
 });
+
 
 exportBtn.addEventListener('click', exportAllData);
 importBtn.addEventListener('click', () => importInput.click());
@@ -1476,7 +1629,7 @@ applyOverlayBtn.addEventListener('click', () => {
     const now = Date.now();
     const absBase = performance.now();  // このストロークの基準時間
 
-    // ★ 位置はそのまま、tAbs だけ「ポイントごとに +1ms」ずらして縦の長さを作る
+    //位置はそのまま、tAbs だけ「ポイントごとに +1ms」ずらして縦の長さを作る
     const points = src.points.map((pt, idx) => ({
       x: pt.x,
       y: pt.y,
@@ -1497,7 +1650,7 @@ applyOverlayBtn.addEventListener('click', () => {
 
     const newId = generateStrokeId();
 
-    // ★ ここ重要：旧ID → 新ID を記録して、あとで snapshot の activeIds に変換する
+    //旧ID → 新ID を記録して、あとで snapshot の activeIds に変換する
     idMap.set(src.id, newId);
 
     const newStroke = {
@@ -1544,7 +1697,7 @@ applyOverlayBtn.addEventListener('click', () => {
     const newSnap = {
       id: newSnapId,
       timestamp: srcSnap.timestamp || new Date().toISOString(),
-      activeIds: mappedActiveIds,          // ★ ここがハイライト等にも使われる
+      activeIds: mappedActiveIds,          //ハイライト等にも使われる
       preview: srcSnap.preview || null,
       originalSnapshotId: srcSnap.id || ''
     };
@@ -1605,9 +1758,9 @@ canvas.addEventListener('mousedown', (e) => {
 
   // === Move モード：選択中ストロークの移動開始 ===
   if (currentTool === 'move' && selectedStrokes.size > 0) {
+    pushUndoState();
     isMovingStrokes = true;
     moveStartMouse = { x: screenX, y: screenY };
-    // 現在の transforms をコピーして保持
     moveStartTransforms = JSON.parse(JSON.stringify(currentTransforms || {}));
     return;
   }
@@ -1710,7 +1863,7 @@ canvas.addEventListener('mouseup', (e) => {
         const newPoints = original.points.map(pt => ({
           x: pt.x + dx,
           y: pt.y + dy,
-          tAbs: abs          // ★ 全点同じ → 描画時間 0ms 扱い
+          tAbs: abs          //全点同じ → 描画時間 0ms 扱い
         }));
 
         if (newPoints.length < 2) return;
@@ -1724,14 +1877,14 @@ canvas.addEventListener('mouseup', (e) => {
           color: original.color,
           startTime: now,
           endTime: now,
-          duration: 0,        // ★ 0ms
+          duration: 0,        //0ms
           length,
           speed: 0,           // 好きなら length/1 でもOK
           active: true,
           startTimeAbs: abs,
           endTimeAbs: abs,
 
-          // ★ ここが大事：どのストロークから移動してきたか
+          //どのストロークから移動してきたか
           parentId: original.id
         };
 
@@ -1777,41 +1930,45 @@ canvas.addEventListener('mouseup', (e) => {
     return;
   }
 
-  // === Pen モード：描画終了 → ストローク確定 ===
+ // === Pen モード：描画終了 → ストローク確定 ===
   if (currentTool === 'pen') {
-    const endTime = Date.now();
-    const duration = endTime - startTime;
+  const endTime = Date.now();
+  const duration = endTime - startTime;
 
-    if (drawing && currentPath.length > 1) {
-      operationCounts.strokesDrawn.push(Date.now());
-      console.log('Stroke Drawn count:', operationCounts.strokesDrawn.length);
+  if (drawing && currentPath.length > 1) {
+    operationCounts.strokesDrawn.push(Date.now());
+    console.log('Stroke Drawn count:', operationCounts.strokesDrawn.length);
 
-      const startAbs = currentPath[0].tAbs ?? performance.now();
-      const endAbs = currentPath.at(-1).tAbs ?? (startAbs + duration);
-      const length = calcLength(currentPath);
-      const speed = length / Math.max(1, duration);
+    const startAbs = currentPath[0].tAbs ?? performance.now();
+    const endAbs = currentPath.at(-1).tAbs ?? (startAbs + duration);
+    const length = calcLength(currentPath);
+    const speed = length / Math.max(1, duration);
 
-      const stroke = {
-        id: generateStrokeId(),
-        points: currentPath,
-        size: penSize,
-        color: penColor,
-        startTime,
-        endTime,
-        duration,
-        length,
-        speed,
-        active: true,
-        startTimeAbs: startAbs,
-        endTimeAbs: endAbs
-      };
-      paths.push(stroke);
-      redoStack = [];
-      updateStrokeList();
-      saveAllPathsToDB();
-    }
-    drawing = false;
+    // ★ ここで「追加前の状態」を履歴に積む
+    pushUndoState();
+
+    const stroke = {
+      id: generateStrokeId(),
+      points: currentPath,
+      size: penSize,
+      color: penColor,
+      startTime,
+      endTime,
+      duration,
+      length,
+      speed,
+      active: true,
+      startTimeAbs: startAbs,
+      endTimeAbs: endAbs
+    };
+    paths.push(stroke);
+    redoStack = [];
+    updateStrokeList();
+    saveAllPathsToDB();
   }
+  drawing = false;
+}
+
 });
 
 
