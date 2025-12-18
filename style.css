@@ -290,3 +290,10 @@ body {
   cursor: pointer;
   background: rgba(255,255,255,0.8);
 }
+
+#canvas{
+  border: 2px solid #a9a4a4 !important;  
+  background: #fff !important;
+  box-sizing: border-box !important;
+  display: block !important;
+}
