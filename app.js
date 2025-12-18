@@ -18,7 +18,9 @@ let isPanning = false;                // Space+ドラッグでのパン中かど
 let panStartMouse = null;             // パン開始時のマウス位置（画面座標）
 let panStartOffset = null;            // パン開始時の viewOffset
 let spacePressed = false;             // Space キーが押されているか
-
+let peekSnapshotIds = new Set();       // 仮選択されている snapshotId 群
+let peekStrokeIds = new Set();         // 仮選択スナップに含まれる activeIds の合成
+let peekShowInactive = false; 
 
 let penColor = '#000000';
 let paths = [];
@@ -572,6 +574,38 @@ function generateSnapshotPreviewFromActiveStrokes() {
   return offCanvas.toDataURL();
 }
 
+function saveSnapshotSilent() {
+  if (!db) return Promise.resolve();
+
+  const id = `snapshot-${Date.now()}`;
+  const preview = generateSnapshotPreviewFromActiveStrokes();
+  const activeIds = paths.filter(p => p.active).map(p => p.id);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_NAME], 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+
+    store.put({
+      id,
+      timestamp: new Date().toISOString(),
+      activeIds,
+      preview,
+      transforms: currentTransforms || {}
+    });
+
+    tx.oncomplete = () => {
+      currentSnapshotId = id;
+      saveAllPathsToDB();
+      listSnapshots();     // 一覧更新（自動保存分が増える）
+      resolve();
+    };
+    tx.onerror = (e) => {
+      console.error('saveSnapshotSilent error:', e.target.error);
+      // 保存失敗でも切替自体はできた方がいいなら resolve() にしてもOK
+      reject(e.target.error);
+    };
+  });
+}
 
 
 function saveSnapshot() {
@@ -601,7 +635,7 @@ function saveSnapshot() {
     currentSnapshotId = id;               // 今のスナップIDを覚えておく
     saveAllPathsToDB();
     listSnapshots();
-    alert('スナップショットが保存されました！');
+    
   };
   tx.onerror = e => {
     console.error('saveSnapshot transaction error:', e.target.error);
@@ -624,6 +658,10 @@ function loadSnapshotById(snapshotId) {
     const snap = req.result;
     if (!snap || !Array.isArray(snap.activeIds)) return;
 
+    pushUndoState();
+    redoStack = [];
+    updateUndoRedoButtons();
+
     currentSnapshotId = snap.id || null;
 
     // アクティブ状態を復元
@@ -642,11 +680,22 @@ function loadSnapshotById(snapshotId) {
 }
 
 
+function rebuildPeekStrokeIds() {
+  const set = new Set();
 
+  // snapshotMeta は listSnapshots() 内で作ってる {id, activeIds,...} の配列
+  snapshotMeta.forEach(s => {
+    if (!peekSnapshotIds.has(s.id)) return;
+    (s.activeIds || []).forEach(id => set.add(id));
+  });
+
+  peekStrokeIds = set;
+}
 
 
 function listSnapshots() {
   if (!db) return;
+
   const tx = db.transaction([STORE_NAME], 'readonly');
   const store = tx.objectStore(STORE_NAME);
   const request = store.getAll();
@@ -658,7 +707,7 @@ function listSnapshots() {
     // DB から snapshot-* のレコードだけ抽出
     const snaps = request.result.filter(r => r.id.startsWith('snapshot-'));
 
-    //ハイライト判定用のメタ情報を作る
+    
     snapshotMeta = snaps.map(s => {
       const ids =
         Array.isArray(s.activeIds) ? s.activeIds :
@@ -671,24 +720,78 @@ function listSnapshots() {
       };
     });
 
-    //サムネ描画
+    
+    const validIds = new Set(snaps.map(s => s.id));
+    peekSnapshotIds = new Set([...peekSnapshotIds].filter(id => validIds.has(id)));
+
+    
+    rebuildPeekStrokeIds();
+
+    
     snaps.forEach(snapshot => {
       const div = document.createElement('div');
       div.style.marginBottom = '10px';
       div.dataset.snapshotId = snapshot.id;
       div.classList.add('snapshot-item');
 
+      // サムネ画像
       const img = document.createElement('img');
       img.src = snapshot.preview;
       img.width = 130;
       img.height = 80;
       img.style.border = '1px solid #ccc';
-      const ts = new Date(snapshot.timestamp).toLocaleString();
+      const ts = snapshot.timestamp ? new Date(snapshot.timestamp).toLocaleString() : '';
       img.title = ts;
-      img.addEventListener('click', () => loadSnapshotById(snapshot.id));
+
+      // 画像クリックは「実際に読み込み」
+      img.addEventListener('click', async () => {
+  // いま表示中と同じスナップなら何もしない（無駄保存防止）
+  if (currentSnapshotId === snapshot.id) return;
+
+  // DB未初期化なら従来通り
+  if (!db) {
+    loadSnapshotById(snapshot.id);
+    return;
+  }
+
+  // ① 切り替え直前に自動保存（完了を待つ）
+  await saveSnapshotSilent();
+
+  // ② 保存が終わってから切り替え
+  loadSnapshotById(snapshot.id);
+});
+
       div.appendChild(img);
 
-      //オーバーレイインポートしたスナップショットなら見た目を変える
+      // ★ 仮選択チェック（左上）
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'snapshot-peek-check';
+      chk.checked = peekSnapshotIds.has(snapshot.id);
+
+      // チェック操作はクリック伝播しない（＝画像クリックでロードされない）
+      chk.addEventListener('click', (e) => e.stopPropagation());
+
+      chk.addEventListener('change', () => {
+        if (chk.checked) peekSnapshotIds.add(snapshot.id);
+        else peekSnapshotIds.delete(snapshot.id);
+
+        rebuildPeekStrokeIds();
+
+        // 仮選択が空なら peek 表示もOFF
+        if (peekSnapshotIds.size === 0) {
+          peekShowInactive = false;
+          const isOn = showInactive || peekShowInactive;
+          showInactiveBtn.classList.toggle('active', isOn);
+          showInactiveBtn.setAttribute('aria-pressed', String(isOn));
+        }
+
+        redraw();
+      });
+
+      div.appendChild(chk);
+
+      // ★ オーバーレイインポートしたスナップショットなら左上にバッジ
       if (snapshot.originalSnapshotId) {
         div.classList.add('snapshot-imported');
 
@@ -701,10 +804,11 @@ function listSnapshots() {
       list.appendChild(div);
     });
 
-    //選択ストロークに応じたハイライトを反映
+    // ★ 選択ストロークに応じた「控えめハイライト」を反映
     highlightSnapshotsForSelection();
   };
 }
+
 
 
 
@@ -911,7 +1015,6 @@ function drawTimeline() {
   const dpr = window.devicePixelRatio || 1;
   let cssW = timelineCanvas.clientWidth;
   const cssH = timelineCanvas.clientHeight;
-  cssW = Math.min(cssW, 200);
   
   if (timelineCanvas.width !== Math.floor(cssW * dpr) || timelineCanvas.height !== Math.floor(cssH * dpr)) {
     timelineCanvas.width = Math.floor(cssW * dpr);
@@ -941,7 +1044,18 @@ function drawTimeline() {
   }
   const totalDrawMs = Math.max(1, cum);
 
-  const xOf = (x) => (x / canvas.width) * cssW;
+  const canvasRect = canvas.getBoundingClientRect();
+const viewW = Math.max(1, canvasRect.width);
+
+// 世界座標 → 画面の見えてる範囲(0..viewW) に正規化してタイムラインへ
+const xOf = (worldX) => {
+  const sx = (worldX - viewOffset.x); // 画面座標へ
+  const nx = sx / viewW;              // 0..1 のはず（画面内なら）
+  // 念のためクランプ
+  const clamped = Math.max(0, Math.min(1, nx));
+  return clamped * cssW;
+};
+
   const yOfPoint = (s, tAbs) => {
     const s0 = s.startTimeAbs ?? s.points?.[0]?.tAbs ?? s.startTime ?? 0;
     const base = offsets.get(s) || 0;
@@ -968,7 +1082,14 @@ function drawTimeline() {
   for (const s of visible) {
     const pts = s.points;
     if (!pts || pts.length < 2) continue;
-    const mapped = pts.map(p => ({ x: xOf(p.x), y: yOfPoint(s, p.tAbs) }));
+    const t = currentTransforms[s.id] || { dx: 0, dy: 0 };
+    const dx = t.dx || 0;
+
+    const mapped = pts.map(p => ({
+      x: xOf(p.x + dx),
+      y: yOfPoint(s, p.tAbs)
+    }));
+
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const q of mapped) {
       if (q.x < minX) minX = q.x;
@@ -1082,10 +1203,16 @@ function redraw() {
   paths.forEach((path, i) => {
     const isSelected = selectedStrokes.has(i);
     const isInactive = !path.active;
-    const revealInactive = altPressed || showInactive;
 
-    // inactive かつ、Alt も ShowInactive もオフ、かつ選択もされていない → 描かない
-    if (isInactive && !revealInactive && !isSelected) return;
+    const revealAllInactive = altPressed || showInactive;
+
+
+    const revealPeekInactive =
+      peekShowInactive &&
+      isInactive &&
+      peekStrokeIds.has(path.id);
+
+if (isInactive && !revealAllInactive && !revealPeekInactive && !isSelected) return;
 
     ctx.save();
 
@@ -1287,7 +1414,7 @@ function toggleActive(index) {
 
 
 function selectStrokesInLasso(p1, p2) {
-  //選択状態が変わる前に履歴を積む
+ 
   pushUndoState();
 
   const minX = Math.min(p1.x, p2.x);
@@ -1297,9 +1424,17 @@ function selectStrokesInLasso(p1, p2) {
 
   selectedStrokes.clear();
 
-  const revealInactive = altPressed || showInactive;
+  
+  const revealAllInactive = altPressed || showInactive;
+
+  
+  const revealPeekInactive = (path) =>
+    peekShowInactive && !path.active && peekStrokeIds.has(path.id);
+
   paths.forEach((path, i) => {
-    if (!path.active && !revealInactive) return;
+    
+    if (!path.active && !revealAllInactive && !revealPeekInactive(path)) return;
+
     for (const pt of path.points) {
       if (pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY) {
         selectedStrokes.add(i);
@@ -1308,6 +1443,7 @@ function selectStrokesInLasso(p1, p2) {
     }
   });
 }
+
 
 
 function selectStrokesInTimelineLasso(p1, p2) {
@@ -1467,13 +1603,26 @@ saveBtn.addEventListener('click', () => {
 showInactiveBtn.addEventListener('click', () => {
   operationCounts.showInactiveClicks.push(Date.now());
   operationCounts.showInactiveExecuted.push(Date.now());
-  console.log('Show Inactive - Clicks:', operationCounts.showInactiveClicks.length, 'Executed:', operationCounts.showInactiveExecuted.length);
-  showInactive = !showInactive;
-  showInactiveBtn.classList.toggle('active', showInactive);
-  showInactiveBtn.setAttribute('aria-pressed', String(showInactive));
+
+  
+  if (peekSnapshotIds.size > 0) {
+    peekShowInactive = !peekShowInactive;
+    
+    rebuildPeekStrokeIds();
+  } else {
+    
+    showInactive = !showInactive;
+  }
+
+  
+  const isOn = showInactive || peekShowInactive;
+  showInactiveBtn.classList.toggle('active', isOn);
+  showInactiveBtn.setAttribute('aria-pressed', String(isOn));
+
   redraw();
   updateStrokeList();
 });
+
 
 toggleStrokeListBtn.addEventListener('click', () => {
   operationCounts.toggleStrokeListClicks.push(Date.now());
@@ -2149,12 +2298,20 @@ timelineCanvas.addEventListener('touchcancel', () => {
 // 初期化
 updateModeUI();
 
-function syncTimelineSize() {
-  timelineCanvas.style.height = canvas.clientHeight + 'px';
-  drawTimeline();
+
+function syncCanvasSizeToCSS() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.floor(rect.width * dpr);
+  const h = Math.floor(rect.height * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // CSS座標系で描けるように
+  }
 }
 
-window.addEventListener('resize', syncTimelineSize);
-setTimeout(syncTimelineSize, 0);
+window.addEventListener('resize', () => { syncCanvasSizeToCSS(); redraw(); });
+setTimeout(() => { syncCanvasSizeToCSS(); redraw(); }, 0);
 
 window.toggleActive = toggleActive;

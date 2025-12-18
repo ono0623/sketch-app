@@ -25,24 +25,30 @@ body {
 }
 
 #snapshotListContainer {
-  width: 380px;  /* 200px → 280px に変更 */
+  flex: 1 1 0;
+  min-width: 180px;          /* 小さくなりすぎ防止（好みで） */
   overflow-y: auto;
   max-height: 420px;
   border: 1px solid #ccc;
   padding: 3px;
   font-size: 12px;
   background: #f9f9f9;
+  box-sizing: border-box;
 }
 
 #canvasWrapper {
+  flex: 8 1 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  box-sizing: border-box;
 }
 
-canvas {
-  border: 1px solid #ccc;
-  background: rgb(255, 255, 255);
+
+#canvas {
+  width: 100%;
+  height: 400px;
+  display: block;
 }
 
 #strokeList {
@@ -64,17 +70,18 @@ canvas {
 }
 
 #timelinePanel {
-  width: 200px;  /* 260px → 320px に変更 */
+  flex: 1 1 0;
+  min-width: 150px;          /* 小さくなりすぎ防止（好みで） */
   background: #f3f3f3;
   border: 1px solid #ccc;
   padding: 2px;
   font-size: 12px;
-  box-sizing: border-box;  /* ← これを追加 */
+  box-sizing: border-box;
 }
 
 #timelineCanvas{
   width: 100%;
-  height: 400px;   
+  height: 400px;
   display: block;
   background: #e0e0e0;
   border: 1px solid #bbb;
@@ -170,7 +177,7 @@ canvas {
 .snapshot-badge {
   position: absolute;
   top: 2px;
-  left: 2px;
+  right: 2px;
   font-size: 10px;
   padding: 1px 4px;
   background: #4b9fff;
@@ -257,7 +264,7 @@ canvas {
 .snapshot-import-badge {
   position: absolute;
   top: 2px;
-  left: 2px;      /* ←左上 */
+  right: 2px;      /* ←右上 */
 
   font-size: 9px;
   padding: 1px 3px;
@@ -269,4 +276,17 @@ canvas {
   pointer-events: none;
 
   box-shadow: 0 0 2px rgba(0,0,0,0.25);
+}
+
+/* Snapshot 仮選択チェック（左上） */
+.snapshot-item { position: relative; }
+
+.snapshot-peek-check {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.8);
 }
