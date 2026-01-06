@@ -528,87 +528,32 @@ isolateSelectedBtn.addEventListener('click', () => {
 // - currentTransforms(dx,dy) を反映
 // - プレビューは固定サイズ（端末間で同じ見え方）
 function generateSnapshotPreviewFromActiveStrokes() {
-  const PREVIEW_W = 260;      // 
-  const PREVIEW_H = 160;
-  const PADDING = 10;         // 周囲余白(px)
-  const DPR = 2;              
-
-  // activeストロークだけ抽出
-  const activePaths = paths.filter(p => p && p.active && Array.isArray(p.points) && p.points.length >= 2);
-  if (activePaths.length === 0) {
-    // 空プレビュー（白背景）
-    const off = document.createElement('canvas');
-    off.width = PREVIEW_W * DPR;
-    off.height = PREVIEW_H * DPR;
-    const c = off.getContext('2d');
-    c.setTransform(DPR, 0, 0, DPR, 0, 0);
-    c.fillStyle = '#ffffff';
-    c.fillRect(0, 0, PREVIEW_W, PREVIEW_H);
-    return off.toDataURL('image/png');
-  }
-
-  // world座標上でのバウンディングボックスを計算
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-  for (const p of activePaths) {
-    const t = (currentTransforms && currentTransforms[p.id]) || { dx: 0, dy: 0 };
-    const dx = t.dx || 0;
-    const dy = t.dy || 0;
-
-    for (const pt of p.points) {
-      const x = pt.x + dx;
-      const y = pt.y + dy;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-  }
-
-
-  const bboxW = Math.max(1, maxX - minX);
-  const bboxH = Math.max(1, maxY - minY);
-
-  // オフスクリーン作成（固定サイズ）
   const offCanvas = document.createElement('canvas');
-  offCanvas.width = PREVIEW_W * DPR;
-  offCanvas.height = PREVIEW_H * DPR;
+  offCanvas.width = canvas.width;
+  offCanvas.height = canvas.height;
   const offCtx = offCanvas.getContext('2d');
-  offCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-  // 背景
+  // 背景を白
   offCtx.fillStyle = '#ffffff';
-  offCtx.fillRect(0, 0, PREVIEW_W, PREVIEW_H);
+  offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
 
-  // bbox をプレビュー枠内に収めるスケールを計算
-  const availW = PREVIEW_W - PADDING * 2;
-  const availH = PREVIEW_H - PADDING * 2;
-  const scale = Math.min(availW / bboxW, availH / bboxH);
+  paths.forEach(path => {
+    if (!path.active) return;
+    const pts = path.points;
+    if (!pts || pts.length < 2) return;
 
-  // bbox の中心がプレビュー中心に来るように平行移動
-  const bboxCx = (minX + maxX) / 2;
-  const bboxCy = (minY + maxY) / 2;
-  const targetCx = PREVIEW_W / 2;
-  const targetCy = PREVIEW_H / 2;
-
-  offCtx.save();
-  offCtx.translate(targetCx, targetCy);
-  offCtx.scale(scale, scale);
-  offCtx.translate(-bboxCx, -bboxCy);
-
-  // 描画（world座標で描く。transforms分は点に足す）
-  for (const p of activePaths) {
-    const pts = p.points;
-    const t = (currentTransforms && currentTransforms[p.id]) || { dx: 0, dy: 0 };
+    // transform（Move の結果）は適用する
+    const t = currentTransforms[path.id] || { dx: 0, dy: 0 };
     const dx = t.dx || 0;
     const dy = t.dy || 0;
 
     offCtx.save();
-    offCtx.strokeStyle = p.color || '#000000';
-    offCtx.lineWidth = p.size || 2;
+    offCtx.strokeStyle = path.color || '#000000';
+    offCtx.lineWidth = path.size || 2;
     offCtx.lineCap = 'round';
     offCtx.lineJoin = 'round';
 
+    // ★ viewOffset を一切引かない（左上基準に戻す）
     offCtx.beginPath();
     offCtx.moveTo(pts[0].x + dx, pts[0].y + dy);
     for (let i = 1; i < pts.length; i++) {
@@ -616,11 +561,9 @@ function generateSnapshotPreviewFromActiveStrokes() {
     }
     offCtx.stroke();
     offCtx.restore();
-  }
+  });
 
-  offCtx.restore();
-
-  return offCanvas.toDataURL('image/png');
+  return offCanvas.toDataURL();
 }
 
 

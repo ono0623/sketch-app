@@ -1,3 +1,4 @@
+/* ===== Base ===== */
 body {
   font-family: sans-serif;
   margin: 0;
@@ -5,15 +6,14 @@ body {
   background: #ffffff;
 }
 
+.label { font-size: 13px; }
+
+/* ===== Layout ===== */
 #toolbar {
   margin: 5px;
   display: flex;
   gap: 5px;
-  justify-content: center; 
-}
-
-.label {
-  font-size: 13px;
+  justify-content: center;
 }
 
 #main {
@@ -26,7 +26,7 @@ body {
 
 #snapshotListContainer {
   flex: 1 1 0;
-  min-width: 180px;          /* 小さくなりすぎ防止（好みで） */
+  min-width: 180px;
   overflow-y: auto;
   max-height: 420px;
   border: 1px solid #ccc;
@@ -44,15 +44,38 @@ body {
   box-sizing: border-box;
 }
 
+#timelinePanel {
+  flex: 1 1 0;
+  min-width: 150px;
+  background: #f3f3f3;
+  border: 1px solid #ccc;
+  padding: 2px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
 
+/* ===== Canvas / Timeline ===== */
 #canvas {
   width: 100%;
   height: 400px;
   display: block;
+
+  border: 2px solid #a9a4a4 !important;
+  background: #fff !important;
+  box-sizing: border-box !important;
 }
 
+#timelineCanvas {
+  width: 100%;
+  height: 400px;
+  display: block;
+  background: #e0e0e0;
+  border: 1px solid #bbb;
+}
+
+/* ===== Stroke List ===== */
 #strokeList {
-  display: none; /* ← 最初は非表示 */
+  display: none;
   margin-top: 10px;
   width: 600px;
   overflow-y: auto;
@@ -69,25 +92,7 @@ body {
   margin-bottom: 5px;
 }
 
-#timelinePanel {
-  flex: 1 1 0;
-  min-width: 150px;          /* 小さくなりすぎ防止（好みで） */
-  background: #f3f3f3;
-  border: 1px solid #ccc;
-  padding: 2px;
-  font-size: 12px;
-  box-sizing: border-box;
-}
-
-#timelineCanvas{
-  width: 100%;
-  height: 400px;
-  display: block;
-  background: #e0e0e0;
-  border: 1px solid #bbb;
-}
-
-/* ツールボタンの共通見た目（任意で微調整してOK） */
+/* ===== Toolbar Buttons ===== */
 #toolbar button {
   border: 1px solid #bbb;
   background: #fff;
@@ -98,14 +103,9 @@ body {
   transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 
-/* アクティブ状態を青く */
-#toolbar button.is-active {
-  background: #1677ff;      /* ブルー */
-  color: #fff;
-  border-color: #1677ff;
-  box-shadow: 0 0 0 2px rgba(22,119,255,0.2);
-}
+#toolbar button:hover { border-color: #888; }
 
+#toolbar button.is-active,
 #showInactiveBtn.active {
   background: #1677ff;
   color: #fff;
@@ -113,172 +113,9 @@ body {
   box-shadow: 0 0 0 2px rgba(22,119,255,0.2);
 }
 
-/* ホバー時のちょい強調 */
-#toolbar button:hover {
-  border-color: #888;
-}
-#toolbar button.is-active:hover {
-  filter: brightness(0.95);
-}
+#toolbar button.is-active:hover { filter: brightness(0.95); }
 
-#overlaySnapshotList {
-  margin-top: 8px;
-  border-top: 1px solid #ccc;
-  padding-top: 5px;
-  font-size: 11px;
-}
-
-.overlay-snapshot-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 3px;
-}
-
-.overlay-snapshot-item label {
-  cursor: pointer;
-}
-
-#overlaySnapshotList {
-  margin-top: 8px;
-  border-top: 1px solid #ccc;
-  padding-top: 5px;
-  font-size: 11px;
-}
-
-.overlay-snapshot-block {
-  margin-bottom: 10px;
-}
-
-.overlay-snapshot-title {
-  font-weight: bold;
-  margin-bottom: 4px;
-}
-
-.overlay-snapshot-item {
-  margin-bottom: 8px;
-}
-
-.overlay-snapshot-item img {
-  border: 1px solid #ccc;
-  display: block;
-  margin-bottom: 2px;
-}
-
-.snapshot-item {
-  position: relative;
-  padding: 2px;
-}
-
-
-
-
-/* 右上の小さなバッジ */
-.snapshot-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  font-size: 10px;
-  padding: 1px 4px;
-  background: #4b9fff;
-  color: #fff;
-  border-radius: 3px;
-  pointer-events: none;
-}
-
-
-
-
-/* Pen＋設定ボタンをまとめるグループ */
-.tool-group {
-  position: relative;       /* ポップアップの基準にする */
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-/* Pen設定トリガーボタン（小さめ） */
-.pen-config-trigger {
-  padding: 0 4px;
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-/* Pen設定のポップアップ */
-.pen-config-panel {
-  position: absolute;
-  top: 100%;         /* Penボタンの下に出す */
-  left: 0;
-  margin-top: 4px;
-  padding: 6px 8px;
-  background: #ffffff;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-  z-index: 1000;
-  min-width: 160px;
-  font-size: 11px;
-  display: none;     /* 初期状態は非表示 */
-}
-
-.pen-config-panel.is-open {
-  display: block;
-}
-
-/* 中身の行 */
-.config-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.config-row:last-child {
-  margin-bottom: 0;
-}
-
-.config-row .label {
-  white-space: nowrap;
-}
-
-.snapshot-import-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;      /* ←右上 */
-
-  font-size: 9px;
-  padding: 1px 3px;
-
-  background: rgba(90, 140, 255, 0.9); /* 青系の控えめカラー */
-  color: #fff;
-
-  border-radius: 3px;
-  pointer-events: none;
-
-  box-shadow: 0 0 2px rgba(0,0,0,0.25);
-}
-
-/* Snapshot 仮選択チェック（左上） */
-.snapshot-item { position: relative; }
-
-.snapshot-peek-check {
-  top: 4px;
-  left: 4px;
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
-  background: rgba(255,255,255,0.8);
-}
-
-#canvas{
-  border: 2px solid #a9a4a4 !important;  
-  background: #fff !important;
-  box-sizing: border-box !important;
-  display: block !important;
-}
-
-/* ===== Snapshot list：チェック行と画像を分離 ===== */
+/* ===== Snapshot List (checkbox row + thumbnail separated) ===== */
 .snapshot-item {
   display: flex;
   flex-direction: column;
@@ -292,18 +129,17 @@ body {
   gap: 6px;
 }
 
-.snapshot-header-label {
-  font-size: 11px;
-  color: #333;
-}
-
-/* 画像＋バッジ類を載せる土台 */
 .snapshot-thumb {
-  position: relative;
+  position: relative;      /* badge用 */
   display: inline-block;
 }
 
-/* もう画像に重ねないので absolute は消す */
+.snapshot-thumb img {
+  display: block;
+  width: 100%;
+}
+
+/* checkboxは画像に重ねずヘッダ行に置く */
 .snapshot-peek-check {
   position: static;
   width: 14px;
@@ -312,13 +148,40 @@ body {
   background: rgba(255,255,255,0.8);
 }
 
-/* バッジは thumb 上に載せる（既存のままでOKだが親が thumb になる） */
-.snapshot-badge,
-.snapshot-selected-badge {
+/* Imported バッジ（thumb上） */
+.snapshot-badge {
   position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 10px;
+  padding: 1px 4px;
+  background: #4b9fff;
+  color: #fff;
+  border-radius: 3px;
+  pointer-events: none;
 }
 
-/* ===== Overlay list：同様に分離 ===== */
+/* 「選択ストロークを含むスナップ」の控えめハイライト */
+.snapshot-thumb.snapshot-has-selection img {
+  border-color: #359aff;
+  box-shadow: 0 0 0 2px rgba(77, 94, 255, 0.35);
+}
+
+/* ===== Overlay Snapshot List ===== */
+#overlaySnapshotList {
+  margin-top: 8px;
+  border-top: 1px solid #ccc;
+  padding-top: 5px;
+  font-size: 11px;
+}
+
+.overlay-snapshot-block { margin-bottom: 10px; }
+
+.overlay-snapshot-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
 .overlay-snapshot-item {
   display: flex;
   flex-direction: column;
@@ -326,8 +189,12 @@ body {
   margin-bottom: 10px;
 }
 
-.overlay-thumb {
-  display: inline-block;
+.overlay-thumb { display: inline-block; }
+
+.overlay-snapshot-item img {
+  border: 1px solid #ccc;
+  display: block;
+  margin-bottom: 2px;
 }
 
 .overlay-checkrow {
@@ -335,9 +202,47 @@ body {
   align-items: center;
 }
 
+.overlay-snapshot-item label { cursor: pointer; }
 
-/* 選択ストロークを含むスナップショットの控えめハイライト */
-.snapshot-thumb.snapshot-has-selection img {
-  border-color: #e6b800;               /* 落ち着いた黄色 */
-  box-shadow: 0 0 0 2px rgba(230,184,0,0.35);
+/* ===== Pen Config Popup ===== */
+.tool-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
+
+.pen-config-trigger {
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.pen-config-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  z-index: 1000;
+  min-width: 160px;
+  font-size: 11px;
+  display: none;
+}
+
+.pen-config-panel.is-open { display: block; }
+
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.config-row:last-child { margin-bottom: 0; }
+
+.config-row .label { white-space: nowrap; }
