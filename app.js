@@ -524,88 +524,105 @@ isolateSelectedBtn.addEventListener('click', () => {
 
 
 
-
-
-
-// 現在の「アクティブなストローク」だけを描いたプレビュー画像を返す
+// - activeストロークのみ対象
+// - currentTransforms(dx,dy) を反映
+// - プレビューは固定サイズ（端末間で同じ見え方）
 function generateSnapshotPreviewFromActiveStrokes() {
-  // メインキャンバスと同じサイズのオフスクリーンキャンバスを作る
+  const PREVIEW_W = 260;      // 
+  const PREVIEW_H = 160;
+  const PADDING = 10;         // 周囲余白(px)
+  const DPR = 2;              
+
+  // activeストロークだけ抽出
+  const activePaths = paths.filter(p => p && p.active && Array.isArray(p.points) && p.points.length >= 2);
+  if (activePaths.length === 0) {
+    // 空プレビュー（白背景）
+    const off = document.createElement('canvas');
+    off.width = PREVIEW_W * DPR;
+    off.height = PREVIEW_H * DPR;
+    const c = off.getContext('2d');
+    c.setTransform(DPR, 0, 0, DPR, 0, 0);
+    c.fillStyle = '#ffffff';
+    c.fillRect(0, 0, PREVIEW_W, PREVIEW_H);
+    return off.toDataURL('image/png');
+  }
+
+  // world座標上でのバウンディングボックスを計算
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+  for (const p of activePaths) {
+    const t = (currentTransforms && currentTransforms[p.id]) || { dx: 0, dy: 0 };
+    const dx = t.dx || 0;
+    const dy = t.dy || 0;
+
+    for (const pt of p.points) {
+      const x = pt.x + dx;
+      const y = pt.y + dy;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+
+  const bboxW = Math.max(1, maxX - minX);
+  const bboxH = Math.max(1, maxY - minY);
+
+  // オフスクリーン作成（固定サイズ）
   const offCanvas = document.createElement('canvas');
-  offCanvas.width = canvas.width;
-  offCanvas.height = canvas.height;
+  offCanvas.width = PREVIEW_W * DPR;
+  offCanvas.height = PREVIEW_H * DPR;
   const offCtx = offCanvas.getContext('2d');
+  offCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-  // 背景を白で塗っておく（お好みで透明でもOK）
+  // 背景
   offCtx.fillStyle = '#ffffff';
-  offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+  offCtx.fillRect(0, 0, PREVIEW_W, PREVIEW_H);
 
-  // active なストロークだけ描画
-  paths.forEach(path => {
-    if (!path.active) return;              // アクティブでないものはスキップ
-    const pts = path.points;
-    if (!pts || pts.length < 2) return;
+  // bbox をプレビュー枠内に収めるスケールを計算
+  const availW = PREVIEW_W - PADDING * 2;
+  const availH = PREVIEW_H - PADDING * 2;
+  const scale = Math.min(availW / bboxW, availH / bboxH);
 
-    // このスナップショットでのレイアウト変形（Move モードの結果）
-    const t = currentTransforms[path.id] || { dx: 0, dy: 0 };
+  // bbox の中心がプレビュー中心に来るように平行移動
+  const bboxCx = (minX + maxX) / 2;
+  const bboxCy = (minY + maxY) / 2;
+  const targetCx = PREVIEW_W / 2;
+  const targetCy = PREVIEW_H / 2;
+
+  offCtx.save();
+  offCtx.translate(targetCx, targetCy);
+  offCtx.scale(scale, scale);
+  offCtx.translate(-bboxCx, -bboxCy);
+
+  // 描画（world座標で描く。transforms分は点に足す）
+  for (const p of activePaths) {
+    const pts = p.points;
+    const t = (currentTransforms && currentTransforms[p.id]) || { dx: 0, dy: 0 };
     const dx = t.dx || 0;
     const dy = t.dy || 0;
 
     offCtx.save();
-    offCtx.strokeStyle = path.color || '#000000';
-    offCtx.lineWidth = path.size || 2;
+    offCtx.strokeStyle = p.color || '#000000';
+    offCtx.lineWidth = p.size || 2;
     offCtx.lineCap = 'round';
     offCtx.lineJoin = 'round';
 
-    // 「ユーザーが見ているカメラ(viewOffset)」に合わせる場合は
-    // redraw() と同じく viewOffset を引く
-    const x0 = pts[0].x + dx - viewOffset.x;
-    const y0 = pts[0].y + dy - viewOffset.y;
     offCtx.beginPath();
-    offCtx.moveTo(x0, y0);
+    offCtx.moveTo(pts[0].x + dx, pts[0].y + dy);
     for (let i = 1; i < pts.length; i++) {
-      const sx = pts[i].x + dx - viewOffset.x;
-      const sy = pts[i].y + dy - viewOffset.y;
-      offCtx.lineTo(sx, sy);
+      offCtx.lineTo(pts[i].x + dx, pts[i].y + dy);
     }
     offCtx.stroke();
     offCtx.restore();
-  });
+  }
 
-  return offCanvas.toDataURL();
+  offCtx.restore();
+
+  return offCanvas.toDataURL('image/png');
 }
 
-function saveSnapshotSilent() {
-  if (!db) return Promise.resolve();
-
-  const id = `snapshot-${Date.now()}`;
-  const preview = generateSnapshotPreviewFromActiveStrokes();
-  const activeIds = paths.filter(p => p.active).map(p => p.id);
-
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_NAME], 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-
-    store.put({
-      id,
-      timestamp: new Date().toISOString(),
-      activeIds,
-      preview,
-      transforms: currentTransforms || {}
-    });
-
-    tx.oncomplete = () => {
-      currentSnapshotId = id;
-      saveAllPathsToDB();
-      listSnapshots();     // 一覧更新（自動保存分が増える）
-      resolve();
-    };
-    tx.onerror = (e) => {
-      console.error('saveSnapshotSilent error:', e.target.error);
-      // 保存失敗でも切替自体はできた方がいいなら resolve() にしてもOK
-      reject(e.target.error);
-    };
-  });
-}
 
 
 function saveSnapshot() {
@@ -707,7 +724,7 @@ function listSnapshots() {
     // DB から snapshot-* のレコードだけ抽出
     const snaps = request.result.filter(r => r.id.startsWith('snapshot-'));
 
-    
+    //   ハイライト判定用のメタ情報を作る（選択強調・peek用の基礎データ）
     snapshotMeta = snaps.map(s => {
       const ids =
         Array.isArray(s.activeIds) ? s.activeIds :
@@ -720,50 +737,23 @@ function listSnapshots() {
       };
     });
 
-    
+    //   「存在しないスナップID」が peek に残ってたら掃除
     const validIds = new Set(snaps.map(s => s.id));
     peekSnapshotIds = new Set([...peekSnapshotIds].filter(id => validIds.has(id)));
 
-    
+    //   peek の stroke 集合を再計算
     rebuildPeekStrokeIds();
 
-    
+    //   サムネ描画
     snaps.forEach(snapshot => {
       const div = document.createElement('div');
-      div.style.marginBottom = '10px';
       div.dataset.snapshotId = snapshot.id;
       div.classList.add('snapshot-item');
 
-      // サムネ画像
-      const img = document.createElement('img');
-      img.src = snapshot.preview;
-      img.width = 130;
-      img.height = 80;
-      img.style.border = '1px solid #ccc';
-      const ts = snapshot.timestamp ? new Date(snapshot.timestamp).toLocaleString() : '';
-      img.title = ts;
+      // ===== 上段：チェックボックス行（画像と分離するので被らない）=====
+      const header = document.createElement('div');
+      header.className = 'snapshot-header';
 
-      // 画像クリックは「実際に読み込み」
-      img.addEventListener('click', async () => {
-  // いま表示中と同じスナップなら何もしない（無駄保存防止）
-  if (currentSnapshotId === snapshot.id) return;
-
-  // DB未初期化なら従来通り
-  if (!db) {
-    loadSnapshotById(snapshot.id);
-    return;
-  }
-
-  // ① 切り替え直前に自動保存（完了を待つ）
-  await saveSnapshotSilent();
-
-  // ② 保存が終わってから切り替え
-  loadSnapshotById(snapshot.id);
-});
-
-      div.appendChild(img);
-
-      // ★ 仮選択チェック（左上）
       const chk = document.createElement('input');
       chk.type = 'checkbox';
       chk.className = 'snapshot-peek-check';
@@ -789,25 +779,45 @@ function listSnapshots() {
         redraw();
       });
 
-      div.appendChild(chk);
 
-      // ★ オーバーレイインポートしたスナップショットなら左上にバッジ
+      header.appendChild(chk);
+      div.appendChild(header);
+
+      // ===== 下段：画像 + バッジ類（ここだけ position:relative にする）=====
+      const thumb = document.createElement('div');
+      thumb.className = 'snapshot-thumb';
+
+      const img = document.createElement('img');
+      img.src = snapshot.preview;
+      img.width = 130;
+      img.height = 80;
+      img.style.border = '1px solid #ccc';
+
+      const ts = snapshot.timestamp ? new Date(snapshot.timestamp).toLocaleString() : '';
+      img.title = ts;
+
+      // 画像クリックは「実際に読み込み」
+      img.addEventListener('click', () => loadSnapshotById(snapshot.id));
+
+      thumb.appendChild(img);
+
+      //   オーバーレイインポートしたスナップショットなら右上にバッジ
       if (snapshot.originalSnapshotId) {
-        div.classList.add('snapshot-imported');
-
         const badge = document.createElement('div');
         badge.className = 'snapshot-badge';
         badge.textContent = 'Imported';
-        div.appendChild(badge);
+        thumb.appendChild(badge);
       }
 
+      div.appendChild(thumb);
       list.appendChild(div);
     });
 
-    // ★ 選択ストロークに応じた「控えめハイライト」を反映
+    //   選択ストロークに応じた「控えめハイライト」を反映
     highlightSnapshotsForSelection();
   };
 }
+
 
 
 
@@ -838,18 +848,24 @@ function renderOverlaySnapshotList() {
     const item = document.createElement('div');
     item.className = 'overlay-snapshot-item';
 
-    // サムネイル
+    // ===== 画像（上）=====
     if (snap.preview) {
+      const thumb = document.createElement('div');
+      thumb.className = 'overlay-thumb';
+
       const img = document.createElement('img');
       img.src = snap.preview;
       img.width = 130;
       img.height = 80;
       img.title = snap.id;
-      item.appendChild(img);
+
+      thumb.appendChild(img);
+      item.appendChild(thumb);
     }
 
-    // チェックボックス + ラベル
-    const line = document.createElement('div');
+    // ===== チェック＋ラベル（下）=====
+    const row = document.createElement('div');
+    row.className = 'overlay-checkrow';
 
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -859,26 +875,25 @@ function renderOverlaySnapshotList() {
     const label = document.createElement('label');
     const ts = snap.timestamp ? new Date(snap.timestamp).toLocaleString() : '(no time)';
     label.textContent = `${snap.id} / ${ts}`;
-    label.style.marginLeft = '4px';
+    label.style.marginLeft = '6px';
 
     checkbox.addEventListener('change', () => {
-      if (checkbox.checked) {
-        overlaySelectedSnapshotIds.add(snap.id);
-      } else {
-        overlaySelectedSnapshotIds.delete(snap.id);
-      }
+      if (checkbox.checked) overlaySelectedSnapshotIds.add(snap.id);
+      else overlaySelectedSnapshotIds.delete(snap.id);
       updateOverlayFromSelection();
     });
 
-    line.appendChild(checkbox);
-    line.appendChild(label);
-    item.appendChild(line);
+    row.appendChild(checkbox);
+    row.appendChild(label);
+
+    item.appendChild(row);
 
     block.appendChild(item);
   });
 
   list.appendChild(block);
 }
+
 
 
 function updateOverlayFromSelection() {
@@ -1138,7 +1153,7 @@ const xOf = (worldX) => {
   }
 
   // 親子ストロークをタイムライン上で点線で結ぶ
-  // ⚠ 親 or 子のどちらかが選択されている場合だけ描画
+  // 親 or 子のどちらかが選択されている場合だけ描画
   for (const item of timelineLayout) {
     const childIdx = item.index;
     const stroke = paths[childIdx];
@@ -1348,11 +1363,12 @@ function updateStrokeList() {
   highlightSnapshotsForSelection();
 }
 
+
 function highlightSnapshotsForSelection() {
   const list = document.getElementById('snapshotList');
   if (!list) return;
 
-  // 1. 選択されているストロークの id 集合
+  // 選択されているストロークID集合
   const selectedStrokeIds = new Set();
   selectedStrokes.forEach(idx => {
     const p = paths[idx];
@@ -1361,7 +1377,7 @@ function highlightSnapshotsForSelection() {
     }
   });
 
-  // 2. 各スナップショットが選択ストロークを含むかどうか判定
+  // 各スナップショットが選択ストロークを含むか
   const snapshotHasSelection = new Map();
   snapshotMeta.forEach(snap => {
     const ids = snap.activeIds || [];
@@ -1369,32 +1385,21 @@ function highlightSnapshotsForSelection() {
     snapshotHasSelection.set(snap.id, has);
   });
 
-  // 3. DOM に小さなバッジを付け外し
-  Array.from(list.children).forEach(child => {
-    const sid = child.dataset.snapshotId;
+  // DOM反映：バッジではなく枠色で表現
+  Array.from(list.children).forEach(item => {
+    const sid = item.dataset.snapshotId;
     if (!sid) return;
+
+    const thumb = item.querySelector('.snapshot-thumb');
+    if (!thumb) return;
 
     const hasSelection = !!snapshotHasSelection.get(sid);
 
-    // 既存のバッジ（あれば）を取得
-    let badge = child.querySelector('.snapshot-selected-badge');
-
-    if (hasSelection) {
-      // なければ作る
-      if (!badge) {
-        badge = document.createElement('div');
-        badge.className = 'snapshot-selected-badge';
-        badge.textContent = 'Sel'; 
-        child.appendChild(badge);
-      }
-    } else {
-      // 対応するストロークを含まない → バッジは外す
-      if (badge) {
-        badge.remove();
-      }
-    }
+    thumb.classList.toggle('snapshot-has-selection', hasSelection);
   });
 }
+
+
 
 
 function toggleActive(index) {
@@ -2093,7 +2098,7 @@ canvas.addEventListener('mouseup', (e) => {
     const length = calcLength(currentPath);
     const speed = length / Math.max(1, duration);
 
-    // ★ ここで「追加前の状態」を履歴に積む
+    //   ここで「追加前の状態」を履歴に積む
     pushUndoState();
 
     const stroke = {

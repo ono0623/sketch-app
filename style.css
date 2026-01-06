@@ -186,26 +186,7 @@ body {
   pointer-events: none;
 }
 
-/* 選択ストロークを含むスナップショットの控えめバッジ */
-.snapshot-selected-badge {
-  position: absolute;
-  top: 2px;
-  left: 2px;        
 
-  font-size: 10px;
-  width: 14px;
-  height: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  background: rgba(240, 192, 0, 0.9); /* 落ち着いた黄色 */
-  color: #fff;
-  border-radius: 50%;  /* ● にする */
-  pointer-events: none;
-
-  box-shadow: 0 0 2px rgba(0,0,0,0.25);
-}
 
 
 /* Pen＋設定ボタンをまとめるグループ */
@@ -282,7 +263,6 @@ body {
 .snapshot-item { position: relative; }
 
 .snapshot-peek-check {
-  position: absolute;
   top: 4px;
   left: 4px;
   width: 14px;
@@ -296,4 +276,68 @@ body {
   background: #fff !important;
   box-sizing: border-box !important;
   display: block !important;
+}
+
+/* ===== Snapshot list：チェック行と画像を分離 ===== */
+.snapshot-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px;
+}
+
+.snapshot-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.snapshot-header-label {
+  font-size: 11px;
+  color: #333;
+}
+
+/* 画像＋バッジ類を載せる土台 */
+.snapshot-thumb {
+  position: relative;
+  display: inline-block;
+}
+
+/* もう画像に重ねないので absolute は消す */
+.snapshot-peek-check {
+  position: static;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.8);
+}
+
+/* バッジは thumb 上に載せる（既存のままでOKだが親が thumb になる） */
+.snapshot-badge,
+.snapshot-selected-badge {
+  position: absolute;
+}
+
+/* ===== Overlay list：同様に分離 ===== */
+.overlay-snapshot-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.overlay-thumb {
+  display: inline-block;
+}
+
+.overlay-checkrow {
+  display: flex;
+  align-items: center;
+}
+
+
+/* 選択ストロークを含むスナップショットの控えめハイライト */
+.snapshot-thumb.snapshot-has-selection img {
+  border-color: #e6b800;               /* 落ち着いた黄色 */
+  box-shadow: 0 0 0 2px rgba(230,184,0,0.35);
 }
