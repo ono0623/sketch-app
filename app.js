@@ -94,6 +94,7 @@ const MAX_HISTORY = 100; //履歴の最大数
 let db;
 
 
+
 function cloneStateForHistory() {
   return {
     // paths 全体（points も含めてディープコピー）
@@ -524,47 +525,52 @@ isolateSelectedBtn.addEventListener('click', () => {
 
 
 
-// - activeストロークのみ対象
-// - currentTransforms(dx,dy) を反映
-// - プレビューは固定サイズ（端末間で同じ見え方）
-function generateSnapshotPreviewFromActiveStrokes() {
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = canvas.width;
-  offCanvas.height = canvas.height;
-  const offCtx = offCanvas.getContext('2d');
+function generateSnapshotPreviewClean() {
+  // CSSサイズ基準（端末依存を避ける）
+  const rect = canvas.getBoundingClientRect();
+  const cssW = Math.floor(rect.width);
+  const cssH = Math.floor(rect.height);
 
-  // 背景を白
-  offCtx.fillStyle = '#ffffff';
-  offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+  // フルサイズ（CSSサイズ）でクリーン描画して、そのまま保存
+  const full = document.createElement('canvas');
+  full.width = cssW;
+  full.height = cssH;
 
-  paths.forEach(path => {
-    if (!path.active) return;
+  const c = full.getContext('2d');
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, cssW, cssH);
+
+  // activeのみ、実線のみ、overlayなし
+  for (const path of paths) {
+    if (!path.active) continue;
     const pts = path.points;
-    if (!pts || pts.length < 2) return;
+    if (!pts || pts.length < 2) continue;
 
-    // transform（Move の結果）は適用する
     const t = currentTransforms[path.id] || { dx: 0, dy: 0 };
     const dx = t.dx || 0;
     const dy = t.dy || 0;
 
-    offCtx.save();
-    offCtx.strokeStyle = path.color || '#000000';
-    offCtx.lineWidth = path.size || 2;
-    offCtx.lineCap = 'round';
-    offCtx.lineJoin = 'round';
+    c.save();
+    c.globalAlpha = 1.0;
+    c.setLineDash([]); // 念のため常に実線
+    c.strokeStyle = path.color || '#000';
+    c.lineWidth = path.size || 2;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
 
-    // ★ viewOffset を一切引かない（左上基準に戻す）
-    offCtx.beginPath();
-    offCtx.moveTo(pts[0].x + dx, pts[0].y + dy);
+    c.beginPath();
+    c.moveTo(pts[0].x + dx - viewOffset.x, pts[0].y + dy - viewOffset.y);
     for (let i = 1; i < pts.length; i++) {
-      offCtx.lineTo(pts[i].x + dx, pts[i].y + dy);
+      c.lineTo(pts[i].x + dx - viewOffset.x, pts[i].y + dy - viewOffset.y);
     }
-    offCtx.stroke();
-    offCtx.restore();
-  });
+    c.stroke();
+    c.restore();
+  }
 
-  return offCanvas.toDataURL();
+  return full.toDataURL('image/png');
 }
+
+
 
 
 
@@ -576,8 +582,7 @@ function saveSnapshot() {
   if (!db) return;
   const id = `snapshot-${Date.now()}`;
 
-  //ここを変更：アクティブストロークだけでプレビューを生成
-  const preview = generateSnapshotPreviewFromActiveStrokes();
+  const preview = generateSnapshotPreviewClean();
 
   const activeIds = paths.filter(p => p.active).map(p => p.id);
 

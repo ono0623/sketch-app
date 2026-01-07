@@ -136,7 +136,8 @@ body {
 
 .snapshot-thumb img {
   display: block;
-  width: 100%;
+  width: 130px;
+  height: 80px;
 }
 
 /* checkboxは画像に重ねずヘッダ行に置く */
