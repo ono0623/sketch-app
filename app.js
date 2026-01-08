@@ -729,6 +729,21 @@ function listSnapshots() {
 
 
       header.appendChild(chk);
+      // 削除ボタン（チェックと同じヘッダー行・プレビューには重ねない）
+const delBtn = document.createElement('button');
+delBtn.type = 'button';
+delBtn.className = 'snapshot-delete-btn';
+delBtn.textContent = '✕';
+
+
+delBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  deleteSnapshotById(snapshot.id, snapshot.timestamp);
+});
+
+
+header.appendChild(delBtn);
+
       div.appendChild(header);
 
       // ===== 下段：画像 + バッジ類（ここだけ position:relative にする）=====
@@ -749,13 +764,10 @@ function listSnapshots() {
 
       thumb.appendChild(img);
 
-      //   オーバーレイインポートしたスナップショットなら右上にバッジ
-      if (snapshot.originalSnapshotId) {
-        const badge = document.createElement('div');
-        badge.className = 'snapshot-badge';
-        badge.textContent = 'Imported';
-        thumb.appendChild(badge);
-      }
+     if (snapshot.originalSnapshotId) {
+  thumb.classList.add('snapshot-imported');
+}
+
 
       div.appendChild(thumb);
       list.appendChild(div);
@@ -767,6 +779,54 @@ function listSnapshots() {
 }
 
 
+function deleteSnapshotById(snapshotId, snapshotTimestamp = null) {
+  if (!db) return;
+  if (!snapshotId) return;
+
+  const tsText = snapshotTimestamp
+    ? new Date(snapshotTimestamp).toLocaleString()
+    : '(time unknown)';
+
+  const ok = confirm(
+    `スナップショットを削除します。\n\n` +
+    `ID: ${snapshotId}\n` +
+    `Time: ${tsText}\n\n` +
+    `※この操作は元に戻せません。`
+  );
+  if (!ok) return;
+
+  const tx = db.transaction([STORE_NAME], 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+
+  const req = store.delete(snapshotId);
+
+  req.onsuccess = () => {
+    // peek 仮選択に残ってたら除去
+    if (peekSnapshotIds && peekSnapshotIds.has(snapshotId)) {
+      peekSnapshotIds.delete(snapshotId);
+      rebuildPeekStrokeIds();
+
+      if (peekSnapshotIds.size === 0) {
+        peekShowInactive = false;
+        const isOn = showInactive || peekShowInactive;
+        showInactiveBtn.classList.toggle('active', isOn);
+        showInactiveBtn.setAttribute('aria-pressed', String(isOn));
+      }
+    }
+
+    listSnapshots();
+
+    if (currentSnapshotId === snapshotId) {
+      currentSnapshotId = null;
+      loadLatestSnapshot();
+    }
+  };
+
+  req.onerror = (e) => {
+    console.error('deleteSnapshotById error:', e.target.error);
+    alert('スナップショットの削除に失敗しました');
+  };
+}
 
 
 
@@ -787,43 +847,34 @@ function renderOverlaySnapshotList() {
   title.textContent = 'Overlay Snapshots (from file)';
   block.appendChild(title);
 
-  // timestamp順に並べ替え（古い→新しい）
+  // timestamp順（古い→新しい）
   const snapsSorted = overlayFileSnapshots
     .slice()
     .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
 
   snapsSorted.forEach(snap => {
+    // ★ snapshot と同じ “上下構造” を使う
     const item = document.createElement('div');
-    item.className = 'overlay-snapshot-item';
+    item.className = 'overlay-snapshot-item snapshot-item';
 
-    // ===== 画像（上）=====
-    if (snap.preview) {
-      const thumb = document.createElement('div');
-      thumb.className = 'overlay-thumb';
-
-      const img = document.createElement('img');
-      img.src = snap.preview;
-      img.width = 130;
-      img.height = 80;
-      img.title = snap.id;
-
-      thumb.appendChild(img);
-      item.appendChild(thumb);
-    }
-
-    // ===== チェック＋ラベル（下）=====
-    const row = document.createElement('div');
-    row.className = 'overlay-checkrow';
+    // --- 上段：チェック行（プレビューと重ねない） ---
+    const header = document.createElement('div');
+    header.className = 'overlay-header snapshot-header';
 
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
+    checkbox.className = 'overlay-check snapshot-peek-check';
     checkbox.value = snap.id;
     checkbox.checked = overlaySelectedSnapshotIds.has(snap.id);
 
-    const label = document.createElement('label');
+    // クリック伝播させない（将来 item クリックなどを追加しても安全）
+    checkbox.addEventListener('click', (e) => e.stopPropagation());
+
+    // ラベル（必要なら。いらないならこのlabelブロックは消してOK）
+    const label = document.createElement('span');
+    label.className = 'overlay-header-label snapshot-header-label';
     const ts = snap.timestamp ? new Date(snap.timestamp).toLocaleString() : '(no time)';
     label.textContent = `${snap.id} / ${ts}`;
-    label.style.marginLeft = '6px';
 
     checkbox.addEventListener('change', () => {
       if (checkbox.checked) overlaySelectedSnapshotIds.add(snap.id);
@@ -831,16 +882,38 @@ function renderOverlaySnapshotList() {
       updateOverlayFromSelection();
     });
 
-    row.appendChild(checkbox);
-    row.appendChild(label);
+    header.appendChild(checkbox);
+    header.appendChild(label);
+    item.appendChild(header);
 
-    item.appendChild(row);
+    // --- 下段：プレビュー ---
+    const thumb = document.createElement('div');
+    thumb.className = 'overlay-thumb snapshot-thumb';
 
+    if (snap.preview) {
+      const img = document.createElement('img');
+      img.src = snap.preview;
+      img.width = 130;
+      img.height = 80;
+      img.title = snap.id;
+      thumb.appendChild(img);
+    } else {
+      // プレビューがない場合の表示（任意）
+      const noPrev = document.createElement('div');
+      noPrev.textContent = '(no preview)';
+      noPrev.style.fontSize = '11px';
+      noPrev.style.color = '#666';
+      noPrev.style.padding = '6px 2px';
+      thumb.appendChild(noPrev);
+    }
+
+    item.appendChild(thumb);
     block.appendChild(item);
   });
 
   list.appendChild(block);
 }
+
 
 
 
@@ -1588,21 +1661,45 @@ toggleStrokeListBtn.addEventListener('click', () => {
   }
 });
 
-document.getElementById('toggleSelectedBtn').addEventListener('click', () => {
-  operationCounts.toggleSelectedClicks.push(Date.now());
-  if (selectedStrokes.size > 0) {
-    operationCounts.toggleSelectedExecuted.push(Date.now());
 
-    //アクティブ切り替え前に履歴を積む
-    pushUndoState();
+function setSelectedActive(toActive) {
+  if (selectedStrokes.size === 0) return;
 
-    selectedStrokes.forEach(index => {
-      paths[index].active = !paths[index].active;
-    });
-    updateStrokeList();
-  }
-  console.log('Toggle Selected - Clicks:', operationCounts.toggleSelectedClicks.length, 'Executed:', operationCounts.toggleSelectedExecuted.length);
+  // 変更前に履歴を積む
+  pushUndoState();
+
+  selectedStrokes.forEach(index => {
+    if (paths[index]) paths[index].active = !!toActive;
+  });
+
+  redoStack = [];
+  updateStrokeList();
+  redraw();
+  saveAllPathsToDB();
+}
+
+// 全部アクティブ化
+document.getElementById('activateSelectedBtn').addEventListener('click', () => {
+
+  operationCounts.activateSelectedClicks = operationCounts.activateSelectedClicks || [];
+  operationCounts.activateSelectedExecuted = operationCounts.activateSelectedExecuted || [];
+  operationCounts.activateSelectedClicks.push(Date.now());
+  operationCounts.activateSelectedExecuted.push(Date.now());
+
+  setSelectedActive(true);
 });
+
+// 全部インアクティブ化
+document.getElementById('inactivateSelectedBtn').addEventListener('click', () => {
+  
+  operationCounts.inactivateSelectedClicks = operationCounts.inactivateSelectedClicks || [];
+  operationCounts.inactivateSelectedExecuted = operationCounts.inactivateSelectedExecuted || [];
+  operationCounts.inactivateSelectedClicks.push(Date.now());
+  operationCounts.inactivateSelectedExecuted.push(Date.now());
+
+  setSelectedActive(false);
+});
+
 
 
 exportBtn.addEventListener('click', exportAllData);

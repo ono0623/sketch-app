@@ -157,7 +157,7 @@ body {
   font-size: 10px;
   padding: 1px 4px;
   background: #4b9fff;
-  color: #fff;
+  color: #b81717;
   border-radius: 3px;
   pointer-events: none;
 }
@@ -247,3 +247,81 @@ body {
 .config-row:last-child { margin-bottom: 0; }
 
 .config-row .label { white-space: nowrap; }
+
+
+/* スナップショットを1カードとして明確にする */
+.snapshot-item{
+  border: 0.5px solid #ddd;
+  border-radius: 0.5px;
+  padding: 5px;
+  margin-bottom: 0.5px;
+  background: #ffffff;
+}
+
+
+/* 上がチェック行であることを分かりやすく */
+.snapshot-header{
+  padding-bottom: 0px;
+  margin-bottom: 0px;
+  border-bottom: 0px dashed #e0e0e0;
+}
+
+
+.snapshot-peek-check{
+  margin: 0;     /* ← これがないとブラウザ既定で余白が入ることがある */
+}
+
+.snapshot-delete-btn{
+  margin-left: auto;      /* 右端に寄せる */
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.snapshot-delete-btn:hover{
+  opacity: 1.0;
+  border-color: #888;
+}
+
+
+.snapshot-thumb.snapshot-imported img {
+  border-color: #6cff7d; 
+  box-shadow: 0 0 0 2px rgba(138, 108, 255, 0.35);
+}
+
+
+#toolbar .group-active button {
+  background-color: #e1ffea;   /* 薄い緑 */
+}
+
+#toolbar .group-history button {
+  background-color: #cdf2ff;   /* 薄い緑 */
+}
+
+#toolbar .group-save button {
+  background-color: #f6d8ff;   /* 薄い緑 */
+}
+
+#toolbar .group-io button {
+  background-color: #ffc3db;   /* 薄い緑 */
+}
+
+#toolbar .group-overlay button {
+  background-color: #f6ffd7;   /* 薄い緑 */
+}
+
+/* ===== toolbar 内のボタン高さを完全に統一 ===== */
+#toolbar button {
+  height: 26px;              /* 好きな高さに調整 */
+  line-height: 26px;         /* 文字を縦中央に */
+  padding: 0 6px;            /* 横方向だけ余白 */
+  box-sizing: border-box;
+  display: inline-flex;      /* 中央揃えを安定させる */
+  align-items: center;
+  justify-content: center;
+}
